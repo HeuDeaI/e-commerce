@@ -2,12 +2,14 @@ package category
 
 import (
 	"context"
-
 	"e-commerce/internal/domains"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"fmt"
+	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
-type CategoryRepository interface {
+type CategoryService interface {
 	CreateCategory(ctx context.Context, category *domains.Category) (*domains.Category, error)
 	GetCategoryByID(ctx context.Context, id uint) (*domains.Category, error)
 	UpdateCategory(ctx context.Context, id uint, category *domains.Category) (*domains.Category, error)
@@ -15,73 +17,89 @@ type CategoryRepository interface {
 	GetAllCategories(ctx context.Context) ([]*domains.Category, error)
 }
 
-type categoryRepository struct {
-	pool *pgxpool.Pool
+type categoryService struct {
+	repo  CategoryRepository
+	cache CachedCategoryRepository
 }
 
-func NewCategoryRepository(pool *pgxpool.Pool) CategoryRepository {
-	return &categoryRepository{pool: pool}
-}
-
-func (r *categoryRepository) CreateCategory(ctx context.Context, category *domains.Category) (*domains.Category, error) {
-	query := `
-        INSERT INTO categories (name, description)
-        VALUES ($1, $2)
-        RETURNING id`
-	row := r.pool.QueryRow(ctx, query, category.Name, category.Description)
-	if err := row.Scan(&category.ID); err != nil {
-		return nil, err
+func NewCategoryService(repo CategoryRepository, cache CachedCategoryRepository) CategoryService {
+	return &categoryService{
+		repo:  repo,
+		cache: cache,
 	}
-	return category, nil
 }
 
-func (r *categoryRepository) GetCategoryByID(ctx context.Context, id uint) (*domains.Category, error) {
-	query := `
-        SELECT id, name, description
-        FROM categories
-        WHERE id = $1`
-	category := &domains.Category{}
-	row := r.pool.QueryRow(ctx, query, id)
-	if err := row.Scan(&category.ID, &category.Name, &category.Description); err != nil {
-		return nil, err
-	}
-	return category, nil
-}
-
-func (r *categoryRepository) UpdateCategory(ctx context.Context, id uint, category *domains.Category) (*domains.Category, error) {
-	query := `
-        UPDATE categories
-        SET name = $1, description = $2
-        WHERE id = $3
-        RETURNING id`
-	row := r.pool.QueryRow(ctx, query, category.Name, category.Description, id)
-	if err := row.Scan(&category.ID); err != nil {
-		return nil, err
-	}
-	return category, nil
-}
-
-func (r *categoryRepository) DeleteCategory(ctx context.Context, id uint) error {
-	query := `DELETE FROM categories WHERE id = $1`
-	_, err := r.pool.Exec(ctx, query, id)
-	return err
-}
-
-func (r *categoryRepository) GetAllCategories(ctx context.Context) ([]*domains.Category, error) {
-	query := `SELECT id, name, description FROM categories`
-	rows, err := r.pool.Query(ctx, query)
+func (s *categoryService) CreateCategory(ctx context.Context, category *domains.Category) (*domains.Category, error) {
+	createdCategory, err := s.repo.CreateCategory(ctx, category)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var categories []*domains.Category
-	for rows.Next() {
-		category := &domains.Category{}
-		if err := rows.Scan(&category.ID, &category.Name, &category.Description); err != nil {
-			return nil, err
-		}
-		categories = append(categories, category)
+	if err := s.cache.SetCategory(ctx, createdCategory, 10*time.Minute); err != nil {
+		return createdCategory, err
 	}
+
+	return createdCategory, nil
+}
+
+func (s *categoryService) GetCategoryByID(ctx context.Context, id uint) (*domains.Category, error) {
+	category, err := s.cache.GetCategoryByID(ctx, id)
+	if err == nil {
+		return category, nil
+	} else if err != redis.Nil {
+		return nil, err
+	}
+
+	category, err = s.repo.GetCategoryByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.cache.SetCategory(ctx, category, 10*time.Minute); err != nil {
+		return category, err
+	}
+
+	return category, nil
+}
+
+func (s *categoryService) UpdateCategory(ctx context.Context, id uint, category *domains.Category) (*domains.Category, error) {
+	updatedCategory, err := s.repo.UpdateCategory(ctx, id, category)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.cache.SetCategory(ctx, updatedCategory, 10*time.Minute); err != nil {
+		return updatedCategory, err
+	}
+
+	return updatedCategory, nil
+}
+
+func (s *categoryService) DeleteCategory(ctx context.Context, id uint) error {
+	if err := s.repo.DeleteCategory(ctx, id); err != nil {
+		return err
+	}
+
+	cacheKey := fmt.Sprintf("category:%d", id)
+	return s.cache.DeleteCache(ctx, cacheKey)
+}
+
+func (s *categoryService) GetAllCategories(ctx context.Context) ([]*domains.Category, error) {
+	categories, err := s.cache.GetAllCategories(ctx)
+	if err == nil {
+		return categories, nil
+	} else if err != redis.Nil {
+		return nil, err
+	}
+
+	categories, err = s.repo.GetAllCategories(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.cache.SetAllCategories(ctx, categories, 10*time.Minute); err != nil {
+		return categories, err
+	}
+
 	return categories, nil
 }

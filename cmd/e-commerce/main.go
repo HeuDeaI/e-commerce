@@ -22,36 +22,35 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	_, err = cache.New(ctx, &cfg.Cache)
-	if err != nil {
-		log.Fatalf("Failed to connect to cache: %v", err)
-	}
-
 	db, err := database.New(ctx, &cfg.Database)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer db.Close()
 
-	if err := db.Migrate(ctx, "internal/database/migrations"); err != nil {
-		log.Fatalf("Error running migrations: %v", err)
+	cacheClient, err := cache.New(ctx, &cfg.Cache)
+	if err != nil {
+		log.Fatalf("Failed to connect to cache: %v", err)
 	}
+	defer cacheClient.Close()
 
 	productRepo := product.NewProductRepository(db.Pool)
 	brandRepo := brand.NewBrandRepository(db.Pool)
 	categoryRepo := category.NewCategoryRepository(db.Pool)
 
-	productService := product.NewProductService(productRepo)
-	brandService := brand.NewBrandService(brandRepo)
-	categoryService := category.NewCategoryService(categoryRepo)
+	productCachedRepo := product.NewCachedProductRepository(cacheClient.Client)
+	brandCachedRepo := brand.NewCachedBrandRepository(cacheClient.Client)
+	categoryCachedRepo := category.NewCachedCategoryRepository(cacheClient.Client)
+
+	productService := product.NewProductService(productRepo, productCachedRepo)
+	brandService := brand.NewBrandService(brandRepo, brandCachedRepo)
+	categoryService := category.NewCategoryService(categoryRepo, categoryCachedRepo)
 
 	productHandler := product.NewProductHandler(productService)
 	brandHandler := brand.NewBrandHandler(brandService)
 	categoryHandler := category.NewCategoryHandler(categoryService)
 
 	router := gin.Default()
-
-	router.LoadHTMLGlob("web/templates/**/*")
 
 	productHandler.RegisterRoutes(router)
 	brandHandler.RegisterRoutes(router)

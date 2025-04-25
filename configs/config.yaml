@@ -6,7 +6,7 @@ database:
   dbname: ecommerce
   sslmode: disable
 
-redis:
+cache:
   addr: "localhost:6379"
   password: ""
   db: 0
