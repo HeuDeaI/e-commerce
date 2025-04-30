@@ -1,87 +1,49 @@
+// internal/category/cache.go
 package category
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"time"
 
+	"e-commerce/internal/cache"
 	"e-commerce/internal/domains"
 	"github.com/redis/go-redis/v9"
 )
 
 type CachedCategoryRepository interface {
-	GetCategoryByID(ctx context.Context, id uint) (*domains.Category, error)
+	GetCategoryByID(ctx context.Context, id int) (*domains.Category, error)
 	GetAllCategories(ctx context.Context) ([]*domains.Category, error)
 	SetCategory(ctx context.Context, category *domains.Category, ttl time.Duration) error
-	DeleteCache(ctx context.Context, key string) error
 	SetAllCategories(ctx context.Context, categories []*domains.Category, ttl time.Duration) error
+	DeleteCategory(ctx context.Context, id int) error
 }
 
 type cachedCategoryRepository struct {
-	cache *redis.Client
+	baseRepository cache.CachedRepositoryInterface[domains.Category]
 }
 
-func NewCachedCategoryRepository(cache *redis.Client) CachedCategoryRepository {
-	return &cachedCategoryRepository{cache: cache}
+func NewCachedCategoryRepository(client *redis.Client) CachedCategoryRepository {
+	return &cachedCategoryRepository{
+		baseRepository: cache.NewBaseCachedRepository[domains.Category](client, "category"),
+	}
 }
 
-func (r *cachedCategoryRepository) GetCategoryByID(ctx context.Context, id uint) (*domains.Category, error) {
-	cacheKey := fmt.Sprintf("category:%d", id)
-	var category domains.Category
-
-	data, err := r.cache.Get(ctx, cacheKey).Result()
-	if err == redis.Nil {
-		return nil, err
-	} else if err != nil {
-		return nil, err
-	}
-
-	if err := json.Unmarshal([]byte(data), &category); err != nil {
-		return nil, err
-	}
-
-	return &category, nil
+func (r *cachedCategoryRepository) GetCategoryByID(ctx context.Context, id int) (*domains.Category, error) {
+	return r.baseRepository.GetByID(ctx, id)
 }
 
 func (r *cachedCategoryRepository) GetAllCategories(ctx context.Context) ([]*domains.Category, error) {
-	cacheKey := "categories:all"
-	var categories []*domains.Category
-
-	data, err := r.cache.Get(ctx, cacheKey).Result()
-	if err == redis.Nil {
-		return nil, err
-	} else if err != nil {
-		return nil, err
-	}
-
-	if err := json.Unmarshal([]byte(data), &categories); err != nil {
-		return nil, err
-	}
-
-	return categories, nil
+	return r.baseRepository.GetAll(ctx)
 }
 
 func (r *cachedCategoryRepository) SetCategory(ctx context.Context, category *domains.Category, ttl time.Duration) error {
-	cacheKey := fmt.Sprintf("category:%d", category.ID)
-	data, err := json.Marshal(category)
-	if err != nil {
-		return err
-	}
-
-	return r.cache.Set(ctx, cacheKey, data, ttl).Err()
-}
-
-func (r *cachedCategoryRepository) DeleteCache(ctx context.Context, key string) error {
-	return r.cache.Del(ctx, key).Err()
+	return r.baseRepository.Set(ctx, category.ID, category, ttl)
 }
 
 func (r *cachedCategoryRepository) SetAllCategories(ctx context.Context, categories []*domains.Category, ttl time.Duration) error {
-	cacheKey := "categories:all"
-	data, err := json.Marshal(categories)
-	if err != nil {
-		return err
-	}
+	return r.baseRepository.SetAll(ctx, categories, ttl)
+}
 
-	return r.cache.Set(ctx, cacheKey, data, ttl).Err()
+func (r *cachedCategoryRepository) DeleteCategory(ctx context.Context, id int) error {
+	return r.baseRepository.Delete(ctx, id)
 }

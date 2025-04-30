@@ -3,7 +3,6 @@ package brand
 import (
 	"context"
 	"e-commerce/internal/domains"
-	"fmt"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -11,9 +10,9 @@ import (
 
 type BrandService interface {
 	CreateBrand(ctx context.Context, brand *domains.Brand) (*domains.Brand, error)
-	GetBrandByID(ctx context.Context, id uint) (*domains.Brand, error)
-	UpdateBrand(ctx context.Context, id uint, brand *domains.Brand) (*domains.Brand, error)
-	DeleteBrand(ctx context.Context, id uint) error
+	GetBrandByID(ctx context.Context, id int) (*domains.Brand, error)
+	UpdateBrand(ctx context.Context, id int, brand *domains.Brand) (*domains.Brand, error)
+	DeleteBrand(ctx context.Context, id int) error
 	GetAllBrands(ctx context.Context) ([]*domains.Brand, error)
 }
 
@@ -39,7 +38,7 @@ func (s *brandService) CreateBrand(ctx context.Context, brand *domains.Brand) (*
 	return createdBrand, nil
 }
 
-func (s *brandService) GetBrandByID(ctx context.Context, id uint) (*domains.Brand, error) {
+func (s *brandService) GetBrandByID(ctx context.Context, id int) (*domains.Brand, error) {
 	brand, err := s.cache.GetBrandByID(ctx, id)
 	if err == nil {
 		return brand, nil
@@ -59,7 +58,7 @@ func (s *brandService) GetBrandByID(ctx context.Context, id uint) (*domains.Bran
 	return brand, nil
 }
 
-func (s *brandService) UpdateBrand(ctx context.Context, id uint, brand *domains.Brand) (*domains.Brand, error) {
+func (s *brandService) UpdateBrand(ctx context.Context, id int, brand *domains.Brand) (*domains.Brand, error) {
 	updatedBrand, err := s.repo.UpdateBrand(ctx, id, brand)
 	if err != nil {
 		return nil, err
@@ -72,13 +71,12 @@ func (s *brandService) UpdateBrand(ctx context.Context, id uint, brand *domains.
 	return updatedBrand, nil
 }
 
-func (s *brandService) DeleteBrand(ctx context.Context, id uint) error {
+func (s *brandService) DeleteBrand(ctx context.Context, id int) error {
 	if err := s.repo.DeleteBrand(ctx, id); err != nil {
 		return err
 	}
 
-	cacheKey := fmt.Sprintf("brand:%d", id)
-	return s.cache.DeleteCache(ctx, cacheKey)
+	return s.cache.DeleteBrand(ctx, id)
 }
 
 func (s *brandService) GetAllBrands(ctx context.Context) ([]*domains.Brand, error) {

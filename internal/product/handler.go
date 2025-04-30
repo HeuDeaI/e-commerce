@@ -43,13 +43,13 @@ func (h *ProductHandler) CreateProduct(c *gin.Context) {
 
 func (h *ProductHandler) GetProductByID(c *gin.Context) {
 	idStr := c.Param("id")
-	idUint, err := strconv.ParseUint(idStr, 10, 32)
+	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid product id"})
 		return
 	}
 
-	product, err := h.service.GetProductByID(c.Request.Context(), uint(idUint))
+	product, err := h.service.GetProductByID(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
@@ -60,7 +60,7 @@ func (h *ProductHandler) GetProductByID(c *gin.Context) {
 
 func (h *ProductHandler) UpdateProduct(c *gin.Context) {
 	idStr := c.Param("id")
-	idUint, err := strconv.ParseUint(idStr, 10, 32)
+	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid product id"})
 		return
@@ -72,7 +72,7 @@ func (h *ProductHandler) UpdateProduct(c *gin.Context) {
 		return
 	}
 
-	updatedProduct, err := h.service.UpdateProduct(c.Request.Context(), uint(idUint), &product)
+	updatedProduct, err := h.service.UpdateProduct(c.Request.Context(), id, &product)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -83,13 +83,13 @@ func (h *ProductHandler) UpdateProduct(c *gin.Context) {
 
 func (h *ProductHandler) DeleteProduct(c *gin.Context) {
 	idStr := c.Param("id")
-	idUint, err := strconv.ParseUint(idStr, 10, 32)
+	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid product id"})
 		return
 	}
 
-	if err := h.service.DeleteProduct(c.Request.Context(), uint(idUint)); err != nil {
+	if err := h.service.DeleteProduct(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

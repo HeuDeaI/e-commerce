@@ -1,87 +1,49 @@
+// internal/product/cache.go
 package product
 
 import (
 	"context"
-	"e-commerce/internal/domains"
-	"encoding/json"
-	"fmt"
 	"time"
 
+	"e-commerce/internal/cache"
+	"e-commerce/internal/domains"
 	"github.com/redis/go-redis/v9"
 )
 
 type CachedProductRepository interface {
-	GetProductByID(ctx context.Context, id uint) (*domains.Product, error)
+	GetProductByID(ctx context.Context, id int) (*domains.Product, error)
 	GetAllProducts(ctx context.Context) ([]*domains.Product, error)
 	SetProduct(ctx context.Context, product *domains.Product, ttl time.Duration) error
-	DeleteCache(ctx context.Context, key string) error
 	SetAllProducts(ctx context.Context, products []*domains.Product, ttl time.Duration) error
+	DeleteProduct(ctx context.Context, id int) error
 }
 
 type cachedProductRepository struct {
-	cache *redis.Client
+	baseRepository cache.CachedRepositoryInterface[domains.Product]
 }
 
-func NewCachedProductRepository(cache *redis.Client) CachedProductRepository {
-	return &cachedProductRepository{cache: cache}
+func NewCachedProductRepository(client *redis.Client) CachedProductRepository {
+	return &cachedProductRepository{
+		baseRepository: cache.NewBaseCachedRepository[domains.Product](client, "product"),
+	}
 }
 
-func (r *cachedProductRepository) GetProductByID(ctx context.Context, id uint) (*domains.Product, error) {
-	cacheKey := fmt.Sprintf("product:%d", id)
-	var product domains.Product
-
-	data, err := r.cache.Get(ctx, cacheKey).Result()
-	if err == redis.Nil {
-		return nil, err
-	} else if err != nil {
-		return nil, err
-	}
-
-	if err := json.Unmarshal([]byte(data), &product); err != nil {
-		return nil, err
-	}
-
-	return &product, nil
+func (r *cachedProductRepository) GetProductByID(ctx context.Context, id int) (*domains.Product, error) {
+	return r.baseRepository.GetByID(ctx, id)
 }
 
 func (r *cachedProductRepository) GetAllProducts(ctx context.Context) ([]*domains.Product, error) {
-	cacheKey := "products:all"
-	var products []*domains.Product
-
-	data, err := r.cache.Get(ctx, cacheKey).Result()
-	if err == redis.Nil {
-		return nil, err
-	} else if err != nil {
-		return nil, err
-	}
-
-	if err := json.Unmarshal([]byte(data), &products); err != nil {
-		return nil, err
-	}
-
-	return products, nil
+	return r.baseRepository.GetAll(ctx)
 }
 
 func (r *cachedProductRepository) SetProduct(ctx context.Context, product *domains.Product, ttl time.Duration) error {
-	cacheKey := fmt.Sprintf("product:%d", product.ID)
-	data, err := json.Marshal(product)
-	if err != nil {
-		return err
-	}
-
-	return r.cache.Set(ctx, cacheKey, data, ttl).Err()
-}
-
-func (r *cachedProductRepository) DeleteCache(ctx context.Context, key string) error {
-	return r.cache.Del(ctx, key).Err()
+	return r.baseRepository.Set(ctx, product.ID, product, ttl)
 }
 
 func (r *cachedProductRepository) SetAllProducts(ctx context.Context, products []*domains.Product, ttl time.Duration) error {
-	cacheKey := "products:all"
-	data, err := json.Marshal(products)
-	if err != nil {
-		return err
-	}
+	return r.baseRepository.SetAll(ctx, products, ttl)
+}
 
-	return r.cache.Set(ctx, cacheKey, data, ttl).Err()
+func (r *cachedProductRepository) DeleteProduct(ctx context.Context, id int) error {
+	return r.baseRepository.Delete(ctx, id)
 }

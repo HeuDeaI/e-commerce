@@ -9,9 +9,9 @@ import (
 
 type ProductRepository interface {
 	CreateProduct(ctx context.Context, product *domains.Product) (*domains.Product, error)
-	GetProductByID(ctx context.Context, id uint) (*domains.Product, error)
-	UpdateProduct(ctx context.Context, id uint, product *domains.Product) (*domains.Product, error)
-	DeleteProduct(ctx context.Context, id uint) error
+	GetProductByID(ctx context.Context, id int) (*domains.Product, error)
+	UpdateProduct(ctx context.Context, id int, product *domains.Product) (*domains.Product, error)
+	DeleteProduct(ctx context.Context, id int) error
 	GetAllProducts(ctx context.Context) ([]*domains.Product, error)
 }
 
@@ -37,7 +37,7 @@ func (r *productRepository) CreateProduct(ctx context.Context, product *domains.
 	return product, nil
 }
 
-func (r *productRepository) GetProductByID(ctx context.Context, id uint) (*domains.Product, error) {
+func (r *productRepository) GetProductByID(ctx context.Context, id int) (*domains.Product, error) {
 	query := `
         SELECT id, name, description, price, category_id, brand_id, created_at, updated_at 
         FROM products WHERE id = $1`
@@ -55,7 +55,7 @@ func (r *productRepository) GetProductByID(ctx context.Context, id uint) (*domai
 	return product, nil
 }
 
-func (r *productRepository) UpdateProduct(ctx context.Context, id uint, product *domains.Product) (*domains.Product, error) {
+func (r *productRepository) UpdateProduct(ctx context.Context, id int, product *domains.Product) (*domains.Product, error) {
 	query := `
         UPDATE products SET name = $1, description = $2, price = $3, category_id = $4, brand_id = $5, updated_at = NOW() 
         WHERE id = $6 RETURNING updated_at`
@@ -70,7 +70,7 @@ func (r *productRepository) UpdateProduct(ctx context.Context, id uint, product 
 	return product, nil
 }
 
-func (r *productRepository) DeleteProduct(ctx context.Context, id uint) error {
+func (r *productRepository) DeleteProduct(ctx context.Context, id int) error {
 	query := `DELETE FROM products WHERE id = $1`
 	_, err := r.pool.Exec(ctx, query, id)
 	if err != nil {

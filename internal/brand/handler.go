@@ -43,13 +43,13 @@ func (h *BrandHandler) CreateBrand(c *gin.Context) {
 
 func (h *BrandHandler) GetBrandByID(c *gin.Context) {
 	idStr := c.Param("id")
-	idUint, err := strconv.ParseUint(idStr, 10, 32)
+	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid brand id"})
 		return
 	}
 
-	brand, err := h.service.GetBrandByID(c.Request.Context(), uint(idUint))
+	brand, err := h.service.GetBrandByID(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
@@ -60,7 +60,7 @@ func (h *BrandHandler) GetBrandByID(c *gin.Context) {
 
 func (h *BrandHandler) UpdateBrand(c *gin.Context) {
 	idStr := c.Param("id")
-	idUint, err := strconv.ParseUint(idStr, 10, 32)
+	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid brand id"})
 		return
@@ -72,7 +72,7 @@ func (h *BrandHandler) UpdateBrand(c *gin.Context) {
 		return
 	}
 
-	updatedBrand, err := h.service.UpdateBrand(c.Request.Context(), uint(idUint), &brand)
+	updatedBrand, err := h.service.UpdateBrand(c.Request.Context(), id, &brand)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -83,13 +83,13 @@ func (h *BrandHandler) UpdateBrand(c *gin.Context) {
 
 func (h *BrandHandler) DeleteBrand(c *gin.Context) {
 	idStr := c.Param("id")
-	idUint, err := strconv.ParseUint(idStr, 10, 32)
+	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid brand id"})
 		return
 	}
 
-	if err := h.service.DeleteBrand(c.Request.Context(), uint(idUint)); err != nil {
+	if err := h.service.DeleteBrand(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

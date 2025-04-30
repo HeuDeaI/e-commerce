@@ -9,9 +9,9 @@ import (
 
 type CategoryRepository interface {
 	CreateCategory(ctx context.Context, category *domains.Category) (*domains.Category, error)
-	GetCategoryByID(ctx context.Context, id uint) (*domains.Category, error)
-	UpdateCategory(ctx context.Context, id uint, category *domains.Category) (*domains.Category, error)
-	DeleteCategory(ctx context.Context, id uint) error
+	GetCategoryByID(ctx context.Context, id int) (*domains.Category, error)
+	UpdateCategory(ctx context.Context, id int, category *domains.Category) (*domains.Category, error)
+	DeleteCategory(ctx context.Context, id int) error
 	GetAllCategories(ctx context.Context) ([]*domains.Category, error)
 }
 
@@ -35,7 +35,7 @@ func (r *categoryRepository) CreateCategory(ctx context.Context, category *domai
 	return category, nil
 }
 
-func (r *categoryRepository) GetCategoryByID(ctx context.Context, id uint) (*domains.Category, error) {
+func (r *categoryRepository) GetCategoryByID(ctx context.Context, id int) (*domains.Category, error) {
 	query := `
         SELECT id, name, description
         FROM categories
@@ -48,7 +48,7 @@ func (r *categoryRepository) GetCategoryByID(ctx context.Context, id uint) (*dom
 	return category, nil
 }
 
-func (r *categoryRepository) UpdateCategory(ctx context.Context, id uint, category *domains.Category) (*domains.Category, error) {
+func (r *categoryRepository) UpdateCategory(ctx context.Context, id int, category *domains.Category) (*domains.Category, error) {
 	query := `
         UPDATE categories
         SET name = $1, description = $2
@@ -61,7 +61,7 @@ func (r *categoryRepository) UpdateCategory(ctx context.Context, id uint, catego
 	return category, nil
 }
 
-func (r *categoryRepository) DeleteCategory(ctx context.Context, id uint) error {
+func (r *categoryRepository) DeleteCategory(ctx context.Context, id int) error {
 	query := `DELETE FROM categories WHERE id = $1`
 	_, err := r.pool.Exec(ctx, query, id)
 	return err

@@ -2,86 +2,47 @@ package brand
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"time"
 
+	"e-commerce/internal/cache"
 	"e-commerce/internal/domains"
 	"github.com/redis/go-redis/v9"
 )
 
 type CachedBrandRepository interface {
-	GetBrandByID(ctx context.Context, id uint) (*domains.Brand, error)
+	GetBrandByID(ctx context.Context, id int) (*domains.Brand, error)
 	GetAllBrands(ctx context.Context) ([]*domains.Brand, error)
 	SetBrand(ctx context.Context, brand *domains.Brand, ttl time.Duration) error
-	DeleteCache(ctx context.Context, key string) error
+	DeleteBrand(ctx context.Context, id int) error
 	SetAllBrands(ctx context.Context, brands []*domains.Brand, ttl time.Duration) error
 }
 
 type cachedBrandRepository struct {
-	cache *redis.Client
+	baseRepository cache.CachedRepositoryInterface[domains.Brand]
 }
 
-func NewCachedBrandRepository(cache *redis.Client) CachedBrandRepository {
-	return &cachedBrandRepository{cache: cache}
+func NewCachedBrandRepository(client *redis.Client) CachedBrandRepository {
+	return &cachedBrandRepository{
+		baseRepository: cache.NewBaseCachedRepository[domains.Brand](client, "brand"),
+	}
 }
 
-func (r *cachedBrandRepository) GetBrandByID(ctx context.Context, id uint) (*domains.Brand, error) {
-	cacheKey := fmt.Sprintf("brand:%d", id)
-	var brand domains.Brand
-
-	data, err := r.cache.Get(ctx, cacheKey).Result()
-	if err == redis.Nil {
-		return nil, err
-	} else if err != nil {
-		return nil, err
-	}
-
-	if err := json.Unmarshal([]byte(data), &brand); err != nil {
-		return nil, err
-	}
-
-	return &brand, nil
+func (r *cachedBrandRepository) GetBrandByID(ctx context.Context, id int) (*domains.Brand, error) {
+	return r.baseRepository.GetByID(ctx, id)
 }
 
 func (r *cachedBrandRepository) GetAllBrands(ctx context.Context) ([]*domains.Brand, error) {
-	cacheKey := "brands:all"
-	var brands []*domains.Brand
-
-	data, err := r.cache.Get(ctx, cacheKey).Result()
-	if err == redis.Nil {
-		return nil, err
-	} else if err != nil {
-		return nil, err
-	}
-
-	if err := json.Unmarshal([]byte(data), &brands); err != nil {
-		return nil, err
-	}
-
-	return brands, nil
+	return r.baseRepository.GetAll(ctx)
 }
 
 func (r *cachedBrandRepository) SetBrand(ctx context.Context, brand *domains.Brand, ttl time.Duration) error {
-	cacheKey := fmt.Sprintf("brand:%d", brand.ID)
-	data, err := json.Marshal(brand)
-	if err != nil {
-		return err
-	}
-
-	return r.cache.Set(ctx, cacheKey, data, ttl).Err()
-}
-
-func (r *cachedBrandRepository) DeleteCache(ctx context.Context, key string) error {
-	return r.cache.Del(ctx, key).Err()
+	return r.baseRepository.Set(ctx, brand.ID, brand, ttl)
 }
 
 func (r *cachedBrandRepository) SetAllBrands(ctx context.Context, brands []*domains.Brand, ttl time.Duration) error {
-	cacheKey := "brands:all"
-	data, err := json.Marshal(brands)
-	if err != nil {
-		return err
-	}
+	return r.baseRepository.SetAll(ctx, brands, ttl)
+}
 
-	return r.cache.Set(ctx, cacheKey, data, ttl).Err()
+func (r *cachedBrandRepository) DeleteBrand(ctx context.Context, id int) error {
+	return r.baseRepository.Delete(ctx, id)
 }

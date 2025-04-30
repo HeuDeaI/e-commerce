@@ -42,13 +42,13 @@ func (h *CategoryHandler) CreateCategory(c *gin.Context) {
 
 func (h *CategoryHandler) GetCategoryByID(c *gin.Context) {
 	idStr := c.Param("id")
-	idUint, err := strconv.ParseUint(idStr, 10, 32)
+	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid category id"})
 		return
 	}
 
-	category, err := h.service.GetCategoryByID(c.Request.Context(), uint(idUint))
+	category, err := h.service.GetCategoryByID(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
@@ -59,7 +59,7 @@ func (h *CategoryHandler) GetCategoryByID(c *gin.Context) {
 
 func (h *CategoryHandler) UpdateCategory(c *gin.Context) {
 	idStr := c.Param("id")
-	idUint, err := strconv.ParseUint(idStr, 10, 32)
+	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid category id"})
 		return
@@ -71,7 +71,7 @@ func (h *CategoryHandler) UpdateCategory(c *gin.Context) {
 		return
 	}
 
-	updatedCategory, err := h.service.UpdateCategory(c.Request.Context(), uint(idUint), &category)
+	updatedCategory, err := h.service.UpdateCategory(c.Request.Context(), id, &category)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -82,13 +82,13 @@ func (h *CategoryHandler) UpdateCategory(c *gin.Context) {
 
 func (h *CategoryHandler) DeleteCategory(c *gin.Context) {
 	idStr := c.Param("id")
-	idUint, err := strconv.ParseUint(idStr, 10, 32)
+	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid category id"})
 		return
 	}
 
-	if err := h.service.DeleteCategory(c.Request.Context(), uint(idUint)); err != nil {
+	if err := h.service.DeleteCategory(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

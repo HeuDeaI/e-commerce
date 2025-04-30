@@ -3,7 +3,6 @@ package product
 import (
 	"context"
 	"e-commerce/internal/domains"
-	"fmt"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -11,9 +10,9 @@ import (
 
 type ProductService interface {
 	CreateProduct(ctx context.Context, product *domains.Product) (*domains.Product, error)
-	GetProductByID(ctx context.Context, id uint) (*domains.Product, error)
-	UpdateProduct(ctx context.Context, id uint, product *domains.Product) (*domains.Product, error)
-	DeleteProduct(ctx context.Context, id uint) error
+	GetProductByID(ctx context.Context, id int) (*domains.Product, error)
+	UpdateProduct(ctx context.Context, id int, product *domains.Product) (*domains.Product, error)
+	DeleteProduct(ctx context.Context, id int) error
 	GetAllProducts(ctx context.Context) ([]*domains.Product, error)
 }
 
@@ -42,7 +41,7 @@ func (s *productService) CreateProduct(ctx context.Context, product *domains.Pro
 	return createdProduct, nil
 }
 
-func (s *productService) GetProductByID(ctx context.Context, id uint) (*domains.Product, error) {
+func (s *productService) GetProductByID(ctx context.Context, id int) (*domains.Product, error) {
 	product, err := s.cache.GetProductByID(ctx, id)
 	if err == nil {
 		return product, nil
@@ -61,7 +60,7 @@ func (s *productService) GetProductByID(ctx context.Context, id uint) (*domains.
 	return product, nil
 }
 
-func (s *productService) UpdateProduct(ctx context.Context, id uint, product *domains.Product) (*domains.Product, error) {
+func (s *productService) UpdateProduct(ctx context.Context, id int, product *domains.Product) (*domains.Product, error) {
 	updatedProduct, err := s.repo.UpdateProduct(ctx, id, product)
 	if err != nil {
 		return nil, err
@@ -74,13 +73,13 @@ func (s *productService) UpdateProduct(ctx context.Context, id uint, product *do
 	return updatedProduct, nil
 }
 
-func (s *productService) DeleteProduct(ctx context.Context, id uint) error {
+func (s *productService) DeleteProduct(ctx context.Context, id int) error {
 	err := s.repo.DeleteProduct(ctx, id)
 	if err != nil {
 		return err
 	}
 
-	if err := s.cache.DeleteCache(ctx, fmt.Sprintf("product:%d", id)); err != nil {
+	if err := s.cache.DeleteProduct(ctx, id); err != nil {
 		return err
 	}
 

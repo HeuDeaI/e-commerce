@@ -3,7 +3,6 @@ package category
 import (
 	"context"
 	"e-commerce/internal/domains"
-	"fmt"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -11,9 +10,9 @@ import (
 
 type CategoryService interface {
 	CreateCategory(ctx context.Context, category *domains.Category) (*domains.Category, error)
-	GetCategoryByID(ctx context.Context, id uint) (*domains.Category, error)
-	UpdateCategory(ctx context.Context, id uint, category *domains.Category) (*domains.Category, error)
-	DeleteCategory(ctx context.Context, id uint) error
+	GetCategoryByID(ctx context.Context, id int) (*domains.Category, error)
+	UpdateCategory(ctx context.Context, id int, category *domains.Category) (*domains.Category, error)
+	DeleteCategory(ctx context.Context, id int) error
 	GetAllCategories(ctx context.Context) ([]*domains.Category, error)
 }
 
@@ -42,7 +41,7 @@ func (s *categoryService) CreateCategory(ctx context.Context, category *domains.
 	return createdCategory, nil
 }
 
-func (s *categoryService) GetCategoryByID(ctx context.Context, id uint) (*domains.Category, error) {
+func (s *categoryService) GetCategoryByID(ctx context.Context, id int) (*domains.Category, error) {
 	category, err := s.cache.GetCategoryByID(ctx, id)
 	if err == nil {
 		return category, nil
@@ -62,7 +61,7 @@ func (s *categoryService) GetCategoryByID(ctx context.Context, id uint) (*domain
 	return category, nil
 }
 
-func (s *categoryService) UpdateCategory(ctx context.Context, id uint, category *domains.Category) (*domains.Category, error) {
+func (s *categoryService) UpdateCategory(ctx context.Context, id int, category *domains.Category) (*domains.Category, error) {
 	updatedCategory, err := s.repo.UpdateCategory(ctx, id, category)
 	if err != nil {
 		return nil, err
@@ -75,13 +74,12 @@ func (s *categoryService) UpdateCategory(ctx context.Context, id uint, category 
 	return updatedCategory, nil
 }
 
-func (s *categoryService) DeleteCategory(ctx context.Context, id uint) error {
+func (s *categoryService) DeleteCategory(ctx context.Context, id int) error {
 	if err := s.repo.DeleteCategory(ctx, id); err != nil {
 		return err
 	}
 
-	cacheKey := fmt.Sprintf("category:%d", id)
-	return s.cache.DeleteCache(ctx, cacheKey)
+	return s.cache.DeleteCategory(ctx, id)
 }
 
 func (s *categoryService) GetAllCategories(ctx context.Context) ([]*domains.Category, error) {

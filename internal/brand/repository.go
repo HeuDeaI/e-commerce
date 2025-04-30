@@ -9,9 +9,9 @@ import (
 
 type BrandRepository interface {
 	CreateBrand(ctx context.Context, brand *domains.Brand) (*domains.Brand, error)
-	GetBrandByID(ctx context.Context, id uint) (*domains.Brand, error)
-	UpdateBrand(ctx context.Context, id uint, brand *domains.Brand) (*domains.Brand, error)
-	DeleteBrand(ctx context.Context, id uint) error
+	GetBrandByID(ctx context.Context, id int) (*domains.Brand, error)
+	UpdateBrand(ctx context.Context, id int, brand *domains.Brand) (*domains.Brand, error)
+	DeleteBrand(ctx context.Context, id int) error
 	GetAllBrands(ctx context.Context) ([]*domains.Brand, error)
 }
 
@@ -37,7 +37,7 @@ func (r *brandRepository) CreateBrand(ctx context.Context, brand *domains.Brand)
 	return brand, nil
 }
 
-func (r *brandRepository) GetBrandByID(ctx context.Context, id uint) (*domains.Brand, error) {
+func (r *brandRepository) GetBrandByID(ctx context.Context, id int) (*domains.Brand, error) {
 	query := `SELECT id, name, description, website FROM brands WHERE id = $1`
 
 	brand := &domains.Brand{}
@@ -50,7 +50,7 @@ func (r *brandRepository) GetBrandByID(ctx context.Context, id uint) (*domains.B
 	return brand, nil
 }
 
-func (r *brandRepository) UpdateBrand(ctx context.Context, id uint, brand *domains.Brand) (*domains.Brand, error) {
+func (r *brandRepository) UpdateBrand(ctx context.Context, id int, brand *domains.Brand) (*domains.Brand, error) {
 	query := `
         UPDATE brands SET name = $1, description = $2, website = $3 
         WHERE id = $4 RETURNING id`
@@ -64,7 +64,7 @@ func (r *brandRepository) UpdateBrand(ctx context.Context, id uint, brand *domai
 	return brand, nil
 }
 
-func (r *brandRepository) DeleteBrand(ctx context.Context, id uint) error {
+func (r *brandRepository) DeleteBrand(ctx context.Context, id int) error {
 	query := `DELETE FROM brands WHERE id = $1`
 	_, err := r.pool.Exec(ctx, query, id)
 	if err != nil {
