@@ -3,9 +3,6 @@ package category
 import (
 	"context"
 	"e-commerce/internal/domains"
-	"time"
-
-	"github.com/redis/go-redis/v9"
 )
 
 type CategoryService interface {
@@ -17,87 +14,29 @@ type CategoryService interface {
 }
 
 type categoryService struct {
-	repo  CategoryRepository
-	cache CachedCategoryRepository
+	repo CategoryRepository
 }
 
-func NewCategoryService(repo CategoryRepository, cache CachedCategoryRepository) CategoryService {
-	return &categoryService{
-		repo:  repo,
-		cache: cache,
-	}
+func NewCategoryService(repo CategoryRepository) CategoryService {
+	return &categoryService{repo: repo}
 }
 
 func (s *categoryService) CreateCategory(ctx context.Context, category *domains.Category) (*domains.Category, error) {
-	createdCategory, err := s.repo.CreateCategory(ctx, category)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.cache.SetCategory(ctx, createdCategory, 10*time.Minute); err != nil {
-		return createdCategory, err
-	}
-
-	return createdCategory, nil
+	return s.repo.Create(ctx, category)
 }
 
 func (s *categoryService) GetCategoryByID(ctx context.Context, id int) (*domains.Category, error) {
-	category, err := s.cache.GetCategoryByID(ctx, id)
-	if err == nil {
-		return category, nil
-	} else if err != redis.Nil {
-		return nil, err
-	}
-
-	category, err = s.repo.GetCategoryByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.cache.SetCategory(ctx, category, 10*time.Minute); err != nil {
-		return category, err
-	}
-
-	return category, nil
+	return s.repo.GetByID(ctx, id)
 }
 
 func (s *categoryService) UpdateCategory(ctx context.Context, id int, category *domains.Category) (*domains.Category, error) {
-	updatedCategory, err := s.repo.UpdateCategory(ctx, id, category)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.cache.SetCategory(ctx, updatedCategory, 10*time.Minute); err != nil {
-		return updatedCategory, err
-	}
-
-	return updatedCategory, nil
+	return s.repo.Update(ctx, id, category)
 }
 
 func (s *categoryService) DeleteCategory(ctx context.Context, id int) error {
-	if err := s.repo.DeleteCategory(ctx, id); err != nil {
-		return err
-	}
-
-	return s.cache.DeleteCategory(ctx, id)
+	return s.repo.Delete(ctx, id)
 }
 
 func (s *categoryService) GetAllCategories(ctx context.Context) ([]*domains.Category, error) {
-	categories, err := s.cache.GetAllCategories(ctx)
-	if err == nil {
-		return categories, nil
-	} else if err != redis.Nil {
-		return nil, err
-	}
-
-	categories, err = s.repo.GetAllCategories(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.cache.SetAllCategories(ctx, categories, 10*time.Minute); err != nil {
-		return categories, err
-	}
-
-	return categories, nil
+	return s.repo.GetAll(ctx)
 }

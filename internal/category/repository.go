@@ -2,74 +2,128 @@ package category
 
 import (
 	"context"
-
+	"e-commerce/internal/cache"
 	"e-commerce/internal/domains"
+	"time"
+
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 )
 
 type CategoryRepository interface {
-	CreateCategory(ctx context.Context, category *domains.Category) (*domains.Category, error)
-	GetCategoryByID(ctx context.Context, id int) (*domains.Category, error)
-	UpdateCategory(ctx context.Context, id int, category *domains.Category) (*domains.Category, error)
-	DeleteCategory(ctx context.Context, id int) error
-	GetAllCategories(ctx context.Context) ([]*domains.Category, error)
+	Create(ctx context.Context, category *domains.Category) (*domains.Category, error)
+	GetByID(ctx context.Context, id int) (*domains.Category, error)
+	Update(ctx context.Context, id int, category *domains.Category) (*domains.Category, error)
+	Delete(ctx context.Context, id int) error
+	GetAll(ctx context.Context) ([]*domains.Category, error)
 }
 
 type categoryRepository struct {
-	pool *pgxpool.Pool
+	db    *pgxpool.Pool
+	cache cache.CachedRepositoryInterface[domains.Category]
+	ttl   time.Duration
 }
 
-func NewCategoryRepository(pool *pgxpool.Pool) CategoryRepository {
-	return &categoryRepository{pool: pool}
+func NewCategoryRepository(db *pgxpool.Pool, redisClient *redis.Client, ttl time.Duration) CategoryRepository {
+	return &categoryRepository{
+		db:    db,
+		cache: cache.NewBaseCachedRepository[domains.Category](redisClient, "category"),
+		ttl:   ttl,
+	}
 }
 
-func (r *categoryRepository) CreateCategory(ctx context.Context, category *domains.Category) (*domains.Category, error) {
-	query := `
-        INSERT INTO categories (name, description)
-        VALUES ($1, $2)
+func (r *categoryRepository) Create(ctx context.Context, category *domains.Category) (*domains.Category, error) {
+	insertQuery := `
+        INSERT INTO categories (name, description) 
+        VALUES ($1, $2) 
         RETURNING id`
-	row := r.pool.QueryRow(ctx, query, category.Name, category.Description)
-	if err := row.Scan(&category.ID); err != nil {
+
+	var id int
+	err := r.db.QueryRow(ctx, insertQuery, category.Name, category.Description).Scan(&id)
+	if err != nil {
 		return nil, err
 	}
-	return category, nil
+
+	created, err := r.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	_ = r.cache.DeleteAll(ctx)
+	_ = r.cache.Set(ctx, created.ID, created, r.ttl)
+	return created, nil
 }
 
-func (r *categoryRepository) GetCategoryByID(ctx context.Context, id int) (*domains.Category, error) {
+func (r *categoryRepository) GetByID(ctx context.Context, id int) (*domains.Category, error) {
+	if category, err := r.cache.GetByID(ctx, id); err == nil {
+		return category, nil
+	}
+
 	query := `
-        SELECT id, name, description
-        FROM categories
+        SELECT id, name, description 
+        FROM categories 
         WHERE id = $1`
+
+	row := r.db.QueryRow(ctx, query, id)
+	category, err := scanCategoryRow(row)
+	if err != nil {
+		return nil, err
+	}
+
+	_ = r.cache.Set(ctx, category.ID, category, r.ttl)
+	return category, nil
+}
+
+func scanCategoryRow(row pgx.Row) (*domains.Category, error) {
 	category := &domains.Category{}
-	row := r.pool.QueryRow(ctx, query, id)
-	if err := row.Scan(&category.ID, &category.Name, &category.Description); err != nil {
-		return nil, err
-	}
-	return category, nil
+	err := row.Scan(&category.ID, &category.Name, &category.Description)
+	return category, err
 }
 
-func (r *categoryRepository) UpdateCategory(ctx context.Context, id int, category *domains.Category) (*domains.Category, error) {
-	query := `
-        UPDATE categories
-        SET name = $1, description = $2
-        WHERE id = $3
-        RETURNING id`
-	row := r.pool.QueryRow(ctx, query, category.Name, category.Description, id)
-	if err := row.Scan(&category.ID); err != nil {
+func (r *categoryRepository) Update(ctx context.Context, id int, category *domains.Category) (*domains.Category, error) {
+	updateQuery := `
+        UPDATE categories 
+        SET name = $1, description = $2 
+        WHERE id = $3`
+
+	_, err := r.db.Exec(ctx, updateQuery, category.Name, category.Description, id)
+	if err != nil {
 		return nil, err
 	}
-	return category, nil
+
+	updated, err := r.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	_ = r.cache.DeleteAll(ctx)
+	_ = r.cache.Set(ctx, updated.ID, updated, r.ttl)
+	return updated, nil
 }
 
-func (r *categoryRepository) DeleteCategory(ctx context.Context, id int) error {
+func (r *categoryRepository) Delete(ctx context.Context, id int) error {
 	query := `DELETE FROM categories WHERE id = $1`
-	_, err := r.pool.Exec(ctx, query, id)
-	return err
+	_, err := r.db.Exec(ctx, query, id)
+	if err != nil {
+		return err
+	}
+
+	_ = r.cache.Delete(ctx, id)
+	_ = r.cache.DeleteAll(ctx)
+	return nil
 }
 
-func (r *categoryRepository) GetAllCategories(ctx context.Context) ([]*domains.Category, error) {
-	query := `SELECT id, name, description FROM categories`
-	rows, err := r.pool.Query(ctx, query)
+func (r *categoryRepository) GetAll(ctx context.Context) ([]*domains.Category, error) {
+	if categories, err := r.cache.GetAll(ctx); err == nil {
+		return categories, nil
+	}
+
+	query := `
+        SELECT id, name, description 
+        FROM categories`
+
+	rows, err := r.db.Query(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -78,10 +132,13 @@ func (r *categoryRepository) GetAllCategories(ctx context.Context) ([]*domains.C
 	var categories []*domains.Category
 	for rows.Next() {
 		category := &domains.Category{}
-		if err := rows.Scan(&category.ID, &category.Name, &category.Description); err != nil {
+		err := rows.Scan(&category.ID, &category.Name, &category.Description)
+		if err != nil {
 			return nil, err
 		}
 		categories = append(categories, category)
 	}
+
+	_ = r.cache.SetAll(ctx, categories, r.ttl)
 	return categories, nil
 }

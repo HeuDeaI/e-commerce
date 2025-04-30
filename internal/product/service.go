@@ -3,9 +3,6 @@ package product
 import (
 	"context"
 	"e-commerce/internal/domains"
-	"time"
-
-	"github.com/redis/go-redis/v9"
 )
 
 type ProductService interface {
@@ -17,90 +14,28 @@ type ProductService interface {
 }
 
 type productService struct {
-	repo  ProductRepository
-	cache CachedProductRepository
+	repo ProductRepository
 }
 
-func NewProductService(repo ProductRepository, cache CachedProductRepository) ProductService {
-	return &productService{
-		repo:  repo,
-		cache: cache,
-	}
+func NewProductService(repo ProductRepository) ProductService {
+	return &productService{repo: repo}
 }
-
 func (s *productService) CreateProduct(ctx context.Context, product *domains.Product) (*domains.Product, error) {
-	createdProduct, err := s.repo.CreateProduct(ctx, product)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.cache.SetProduct(ctx, createdProduct, 10*time.Minute); err != nil {
-		return createdProduct, err
-	}
-
-	return createdProduct, nil
+	return s.repo.Create(ctx, product)
 }
 
 func (s *productService) GetProductByID(ctx context.Context, id int) (*domains.Product, error) {
-	product, err := s.cache.GetProductByID(ctx, id)
-	if err == nil {
-		return product, nil
-	} else if err != redis.Nil {
-		return nil, err
-	}
-
-	product, err = s.repo.GetProductByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.cache.SetProduct(ctx, product, 10*time.Minute); err != nil {
-		return product, err
-	}
-	return product, nil
+	return s.repo.GetByID(ctx, id)
 }
 
 func (s *productService) UpdateProduct(ctx context.Context, id int, product *domains.Product) (*domains.Product, error) {
-	updatedProduct, err := s.repo.UpdateProduct(ctx, id, product)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.cache.SetProduct(ctx, updatedProduct, 10*time.Minute); err != nil {
-		return updatedProduct, err
-	}
-
-	return updatedProduct, nil
+	return s.repo.Update(ctx, id, product)
 }
 
 func (s *productService) DeleteProduct(ctx context.Context, id int) error {
-	err := s.repo.DeleteProduct(ctx, id)
-	if err != nil {
-		return err
-	}
-
-	if err := s.cache.DeleteProduct(ctx, id); err != nil {
-		return err
-	}
-
-	return nil
+	return s.repo.Delete(ctx, id)
 }
 
 func (s *productService) GetAllProducts(ctx context.Context) ([]*domains.Product, error) {
-	products, err := s.cache.GetAllProducts(ctx)
-	if err == nil {
-		return products, nil
-	} else if err != redis.Nil {
-		return nil, err
-	}
-
-	products, err = s.repo.GetAllProducts(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.cache.SetAllProducts(ctx, products, 10*time.Minute); err != nil {
-		return products, err
-	}
-	return products, nil
+	return s.repo.GetAll(ctx)
 }

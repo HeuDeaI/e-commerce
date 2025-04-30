@@ -2,81 +2,121 @@ package brand
 
 import (
 	"context"
+	"e-commerce/internal/cache"
 	"e-commerce/internal/domains"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 )
 
 type BrandRepository interface {
-	CreateBrand(ctx context.Context, brand *domains.Brand) (*domains.Brand, error)
-	GetBrandByID(ctx context.Context, id int) (*domains.Brand, error)
-	UpdateBrand(ctx context.Context, id int, brand *domains.Brand) (*domains.Brand, error)
-	DeleteBrand(ctx context.Context, id int) error
-	GetAllBrands(ctx context.Context) ([]*domains.Brand, error)
+	Create(ctx context.Context, brand *domains.Brand) (*domains.Brand, error)
+	GetByID(ctx context.Context, id int) (*domains.Brand, error)
+	Update(ctx context.Context, id int, brand *domains.Brand) (*domains.Brand, error)
+	Delete(ctx context.Context, id int) error
+	GetAll(ctx context.Context) ([]*domains.Brand, error)
 }
 
 type brandRepository struct {
-	pool *pgxpool.Pool
+	db    *pgxpool.Pool
+	cache cache.CachedRepositoryInterface[domains.Brand]
+	ttl   time.Duration
 }
 
-func NewBrandRepository(pool *pgxpool.Pool) BrandRepository {
-	return &brandRepository{pool: pool}
+func NewBrandRepository(db *pgxpool.Pool, redisClient *redis.Client, ttl time.Duration) BrandRepository {
+	return &brandRepository{
+		db:    db,
+		cache: cache.NewBaseCachedRepository[domains.Brand](redisClient, "brand"),
+		ttl:   ttl,
+	}
 }
 
-func (r *brandRepository) CreateBrand(ctx context.Context, brand *domains.Brand) (*domains.Brand, error) {
-	query := `
+func (r *brandRepository) Create(ctx context.Context, brand *domains.Brand) (*domains.Brand, error) {
+	insertQuery := `
         INSERT INTO brands (name, description, website)
         VALUES ($1, $2, $3) RETURNING id`
 
-	row := r.pool.QueryRow(ctx, query, brand.Name, brand.Description, brand.Website)
-	err := row.Scan(&brand.ID)
+	var id int
+	err := r.db.QueryRow(ctx, insertQuery, brand.Name, brand.Description, brand.Website).Scan(&id)
 	if err != nil {
 		return nil, err
 	}
 
-	return brand, nil
+	created, err := r.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	_ = r.cache.DeleteAll(ctx)
+	_ = r.cache.Set(ctx, created.ID, created, r.ttl)
+	return created, nil
 }
 
-func (r *brandRepository) GetBrandByID(ctx context.Context, id int) (*domains.Brand, error) {
-	query := `SELECT id, name, description, website FROM brands WHERE id = $1`
+func (r *brandRepository) GetByID(ctx context.Context, id int) (*domains.Brand, error) {
+	if brand, err := r.cache.GetByID(ctx, id); err == nil {
+		return brand, nil
+	}
+
+	query := `
+        SELECT id, name, description, website 
+        FROM brands 
+        WHERE id = $1`
 
 	brand := &domains.Brand{}
-	row := r.pool.QueryRow(ctx, query, id)
+	row := r.db.QueryRow(ctx, query, id)
 	err := row.Scan(&brand.ID, &brand.Name, &brand.Description, &brand.Website)
 	if err != nil {
 		return nil, err
 	}
 
+	_ = r.cache.Set(ctx, brand.ID, brand, r.ttl)
 	return brand, nil
 }
 
-func (r *brandRepository) UpdateBrand(ctx context.Context, id int, brand *domains.Brand) (*domains.Brand, error) {
-	query := `
-        UPDATE brands SET name = $1, description = $2, website = $3 
-        WHERE id = $4 RETURNING id`
+func (r *brandRepository) Update(ctx context.Context, id int, brand *domains.Brand) (*domains.Brand, error) {
+	updateQuery := `
+        UPDATE brands 
+        SET name = $1, description = $2, website = $3 
+        WHERE id = $4`
 
-	row := r.pool.QueryRow(ctx, query, brand.Name, brand.Description, brand.Website, id)
-	err := row.Scan(&brand.ID)
+	_, err := r.db.Exec(ctx, updateQuery, brand.Name, brand.Description, brand.Website, id)
 	if err != nil {
 		return nil, err
 	}
 
-	return brand, nil
+	updated, err := r.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	_ = r.cache.DeleteAll(ctx)
+	_ = r.cache.Set(ctx, updated.ID, updated, r.ttl)
+	return updated, nil
 }
 
-func (r *brandRepository) DeleteBrand(ctx context.Context, id int) error {
-	query := `DELETE FROM brands WHERE id = $1`
-	_, err := r.pool.Exec(ctx, query, id)
+func (r *brandRepository) Delete(ctx context.Context, id int) error {
+	deleteQuery := `DELETE FROM brands WHERE id = $1`
+	_, err := r.db.Exec(ctx, deleteQuery, id)
 	if err != nil {
 		return err
 	}
+
+	_ = r.cache.Delete(ctx, id)
+	_ = r.cache.DeleteAll(ctx)
 	return nil
 }
 
-func (r *brandRepository) GetAllBrands(ctx context.Context) ([]*domains.Brand, error) {
-	query := `SELECT id, name, description, website FROM brands`
+func (r *brandRepository) GetAll(ctx context.Context) ([]*domains.Brand, error) {
+	if brands, err := r.cache.GetAll(ctx); err == nil {
+		return brands, nil
+	}
 
-	rows, err := r.pool.Query(ctx, query)
+	query := `
+        SELECT id, name, description, website 
+        FROM brands`
+
+	rows, err := r.db.Query(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -92,5 +132,6 @@ func (r *brandRepository) GetAllBrands(ctx context.Context) ([]*domains.Brand, e
 		brands = append(brands, brand)
 	}
 
+	_ = r.cache.SetAll(ctx, brands, r.ttl)
 	return brands, nil
 }

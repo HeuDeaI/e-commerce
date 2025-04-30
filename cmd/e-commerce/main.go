@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"time"
 
 	"e-commerce/internal/brand"
 	"e-commerce/internal/cache"
@@ -34,17 +35,13 @@ func main() {
 	}
 	defer cacheClient.Close()
 
-	productRepo := product.NewProductRepository(db.Pool)
-	brandRepo := brand.NewBrandRepository(db.Pool)
-	categoryRepo := category.NewCategoryRepository(db.Pool)
+	productRepo := product.NewProductRepository(db.Pool, cacheClient.Client, 1*time.Hour)
+	brandRepo := brand.NewBrandRepository(db.Pool, cacheClient.Client, 1*time.Hour)
+	categoryRepo := category.NewCategoryRepository(db.Pool, cacheClient.Client, 1*time.Hour)
 
-	productCachedRepo := product.NewCachedProductRepository(cacheClient.Client)
-	brandCachedRepo := brand.NewCachedBrandRepository(cacheClient.Client)
-	categoryCachedRepo := category.NewCachedCategoryRepository(cacheClient.Client)
-
-	productService := product.NewProductService(productRepo, productCachedRepo)
-	brandService := brand.NewBrandService(brandRepo, brandCachedRepo)
-	categoryService := category.NewCategoryService(categoryRepo, categoryCachedRepo)
+	productService := product.NewProductService(productRepo)
+	brandService := brand.NewBrandService(brandRepo)
+	categoryService := category.NewCategoryService(categoryRepo)
 
 	productHandler := product.NewProductHandler(productService)
 	brandHandler := brand.NewBrandHandler(brandService)

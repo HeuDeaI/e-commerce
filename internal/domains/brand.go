@@ -5,11 +5,11 @@ import (
 )
 
 type Brand struct {
-	ID          int       `json:"id"`
+	ID          int       `json:"id,omitempty"`
 	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	Website     string    `json:"website"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
-	Products    []Product `json:"products"`
+	Description string    `json:"description,omitempty"`
+	Website     string    `json:"website,omitempty"`
+	CreatedAt   time.Time `json:"-"`
+	UpdatedAt   time.Time `json:"-"`
+	Products    []Product `json:"products,omitempty"`
 }

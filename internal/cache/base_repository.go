@@ -15,6 +15,7 @@ type CachedRepositoryInterface[T any] interface {
 	Set(ctx context.Context, id int, item *T, ttl time.Duration) error
 	SetAll(ctx context.Context, items []*T, ttl time.Duration) error
 	Delete(ctx context.Context, id int) error
+	DeleteAll(ctx context.Context) error
 }
 
 type BaseCachedRepository[T any] struct {
@@ -76,4 +77,8 @@ func (r *BaseCachedRepository[T]) SetAll(ctx context.Context, items []*T, ttl ti
 func (r *BaseCachedRepository[T]) Delete(ctx context.Context, id int) error {
 	key := fmt.Sprintf("%s:%d", r.keyPrefix, id)
 	return r.client.Del(ctx, key).Err()
+}
+
+func (r *BaseCachedRepository[T]) DeleteAll(ctx context.Context) error {
+	return r.client.Del(ctx, r.keyPrefix+":all").Err()
 }

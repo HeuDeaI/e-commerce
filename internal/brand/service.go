@@ -3,9 +3,6 @@ package brand
 import (
 	"context"
 	"e-commerce/internal/domains"
-	"time"
-
-	"github.com/redis/go-redis/v9"
 )
 
 type BrandService interface {
@@ -17,84 +14,29 @@ type BrandService interface {
 }
 
 type brandService struct {
-	repo  BrandRepository
-	cache CachedBrandRepository
+	repo BrandRepository
 }
 
-func NewBrandService(repo BrandRepository, cache CachedBrandRepository) BrandService {
-	return &brandService{repo: repo, cache: cache}
+func NewBrandService(repo BrandRepository) BrandService {
+	return &brandService{repo: repo}
 }
 
 func (s *brandService) CreateBrand(ctx context.Context, brand *domains.Brand) (*domains.Brand, error) {
-	createdBrand, err := s.repo.CreateBrand(ctx, brand)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.cache.SetBrand(ctx, createdBrand, 10*time.Minute); err != nil {
-		return createdBrand, err
-	}
-
-	return createdBrand, nil
+	return s.repo.Create(ctx, brand)
 }
 
 func (s *brandService) GetBrandByID(ctx context.Context, id int) (*domains.Brand, error) {
-	brand, err := s.cache.GetBrandByID(ctx, id)
-	if err == nil {
-		return brand, nil
-	} else if err != redis.Nil {
-		return nil, err
-	}
-
-	brand, err = s.repo.GetBrandByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.cache.SetBrand(ctx, brand, 10*time.Minute); err != nil {
-		return brand, err
-	}
-
-	return brand, nil
+	return s.repo.GetByID(ctx, id)
 }
 
 func (s *brandService) UpdateBrand(ctx context.Context, id int, brand *domains.Brand) (*domains.Brand, error) {
-	updatedBrand, err := s.repo.UpdateBrand(ctx, id, brand)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.cache.SetBrand(ctx, updatedBrand, 10*time.Minute); err != nil {
-		return updatedBrand, err
-	}
-
-	return updatedBrand, nil
+	return s.repo.Update(ctx, id, brand)
 }
 
 func (s *brandService) DeleteBrand(ctx context.Context, id int) error {
-	if err := s.repo.DeleteBrand(ctx, id); err != nil {
-		return err
-	}
-
-	return s.cache.DeleteBrand(ctx, id)
+	return s.repo.Delete(ctx, id)
 }
 
 func (s *brandService) GetAllBrands(ctx context.Context) ([]*domains.Brand, error) {
-	brands, err := s.cache.GetAllBrands(ctx)
-	if err == nil {
-		return brands, nil
-	} else if err != redis.Nil {
-		return nil, err
-	}
-
-	brands, err = s.repo.GetAllBrands(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.cache.SetAllBrands(ctx, brands, 10*time.Minute); err != nil {
-		return brands, err
-	}
-
-	return brands, nil
+	return s.repo.GetAll(ctx)
 }
