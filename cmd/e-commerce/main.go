@@ -36,9 +36,9 @@ func main() {
 	}
 	defer cacheClient.Close()
 
-	productRepo := product.NewProductRepository(db.Pool, cacheClient.Client, 1*time.Hour)
-	brandRepo := brand.NewBrandRepository(db.Pool, cacheClient.Client, 1*time.Hour)
-	categoryRepo := category.NewCategoryRepository(db.Pool, cacheClient.Client, 1*time.Hour)
+	productRepo := product.NewProductRepository(db.Pool, cacheClient.Client)
+	brandRepo := brand.NewBrandRepository(db.Pool, cacheClient.Client)
+	categoryRepo := category.NewCategoryRepository(db.Pool, cacheClient.Client)
 
 	productService := product.NewProductService(productRepo)
 	brandService := brand.NewBrandService(brandRepo)

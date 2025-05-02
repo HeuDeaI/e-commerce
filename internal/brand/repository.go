@@ -4,7 +4,6 @@ import (
 	"context"
 	"e-commerce/internal/cache"
 	"e-commerce/internal/domains"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -20,15 +19,13 @@ type BrandRepository interface {
 
 type brandRepository struct {
 	db    *pgxpool.Pool
-	cache cache.CachedRepositoryInterface[domains.Brand]
-	ttl   time.Duration
+	cache cache.CacheRepository[domains.Brand]
 }
 
-func NewBrandRepository(db *pgxpool.Pool, redisClient *redis.Client, ttl time.Duration) BrandRepository {
+func NewBrandRepository(db *pgxpool.Pool, redisClient *redis.Client) BrandRepository {
 	return &brandRepository{
 		db:    db,
-		cache: cache.NewBaseCachedRepository[domains.Brand](redisClient, "brand"),
-		ttl:   ttl,
+		cache: cache.NewCacheRepository[domains.Brand](redisClient, "brand"),
 	}
 }
 
@@ -48,13 +45,19 @@ func (r *brandRepository) Create(ctx context.Context, brand *domains.Brand) (*do
 		return nil, err
 	}
 
-	_ = r.cache.DeleteAll(ctx)
-	_ = r.cache.Set(ctx, created.ID, created, r.ttl)
+	if err = r.cache.DeleteAll(ctx); err != nil {
+		return created, err
+	}
+	if err = r.cache.Set(ctx, created.ID, created); err != nil {
+		return created, err
+	}
+
 	return created, nil
 }
 
 func (r *brandRepository) GetByID(ctx context.Context, id int) (*domains.Brand, error) {
-	if brand, err := r.cache.GetByID(ctx, id); err == nil {
+	brand, cacheErr := r.cache.GetByID(ctx, id)
+	if cacheErr == nil {
 		return brand, nil
 	}
 
@@ -63,14 +66,19 @@ func (r *brandRepository) GetByID(ctx context.Context, id int) (*domains.Brand, 
         FROM brands 
         WHERE id = $1`
 
-	brand := &domains.Brand{}
-	row := r.db.QueryRow(ctx, query, id)
-	err := row.Scan(&brand.ID, &brand.Name, &brand.Description, &brand.Website)
+	brand = &domains.Brand{}
+	err := r.db.QueryRow(ctx, query, id).Scan(&brand.ID, &brand.Name, &brand.Description, &brand.Website)
 	if err != nil {
 		return nil, err
 	}
 
-	_ = r.cache.Set(ctx, brand.ID, brand, r.ttl)
+	if cacheErr != redis.Nil {
+		return brand, err
+	}
+	if err = r.cache.Set(ctx, brand.ID, brand); err != nil {
+		return brand, err
+	}
+
 	return brand, nil
 }
 
@@ -90,8 +98,13 @@ func (r *brandRepository) Update(ctx context.Context, id int, brand *domains.Bra
 		return nil, err
 	}
 
-	_ = r.cache.DeleteAll(ctx)
-	_ = r.cache.Set(ctx, updated.ID, updated, r.ttl)
+	if err = r.cache.DeleteAll(ctx); err != nil {
+		return updated, err
+	}
+	if err = r.cache.Set(ctx, updated.ID, updated); err != nil {
+		return updated, err
+	}
+
 	return updated, nil
 }
 
@@ -102,13 +115,19 @@ func (r *brandRepository) Delete(ctx context.Context, id int) error {
 		return err
 	}
 
-	_ = r.cache.Delete(ctx, id)
-	_ = r.cache.DeleteAll(ctx)
+	if err = r.cache.Delete(ctx, id); err != nil {
+		return err
+	}
+	if err = r.cache.DeleteAll(ctx); err != nil {
+		return err
+	}
+
 	return nil
 }
 
 func (r *brandRepository) GetAll(ctx context.Context) ([]*domains.Brand, error) {
-	if brands, err := r.cache.GetAll(ctx); err == nil {
+	brands, cacheErr := r.cache.GetAll(ctx)
+	if cacheErr == nil {
 		return brands, nil
 	}
 
@@ -122,16 +141,21 @@ func (r *brandRepository) GetAll(ctx context.Context) ([]*domains.Brand, error) 
 	}
 	defer rows.Close()
 
-	var brands []*domains.Brand
+	var brandsList []*domains.Brand
 	for rows.Next() {
 		brand := &domains.Brand{}
-		err := rows.Scan(&brand.ID, &brand.Name, &brand.Description, &brand.Website)
-		if err != nil {
+		if err = rows.Scan(&brand.ID, &brand.Name, &brand.Description, &brand.Website); err != nil {
 			return nil, err
 		}
-		brands = append(brands, brand)
+		brandsList = append(brandsList, brand)
 	}
 
-	_ = r.cache.SetAll(ctx, brands, r.ttl)
-	return brands, nil
+	if cacheErr != redis.Nil {
+		return brands, err
+	}
+	if err = r.cache.SetAll(ctx, brandsList); err != nil {
+		return brandsList, err
+	}
+
+	return brandsList, nil
 }

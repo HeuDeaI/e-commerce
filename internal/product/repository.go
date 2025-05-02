@@ -4,7 +4,6 @@ import (
 	"context"
 	"e-commerce/internal/cache"
 	"e-commerce/internal/domains"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -21,15 +20,13 @@ type ProductRepository interface {
 
 type productRepository struct {
 	db    *pgxpool.Pool
-	cache cache.CachedRepositoryInterface[domains.Product]
-	ttl   time.Duration
+	cache cache.CacheRepository[domains.Product]
 }
 
-func NewProductRepository(db *pgxpool.Pool, redisClient *redis.Client, ttl time.Duration) ProductRepository {
+func NewProductRepository(db *pgxpool.Pool, redisClient *redis.Client) ProductRepository {
 	return &productRepository{
 		db:    db,
-		cache: cache.NewBaseCachedRepository[domains.Product](redisClient, "product"),
-		ttl:   ttl,
+		cache: cache.NewCacheRepository[domains.Product](redisClient, "product"),
 	}
 }
 
@@ -51,26 +48,33 @@ func (r *productRepository) Create(ctx context.Context, product *domains.Product
 		return nil, err
 	}
 
-	_ = r.cache.DeleteAll(ctx)
-	_ = r.cache.Set(ctx, created.ID, created, r.ttl)
+	if err = r.cache.DeleteAll(ctx); err != nil {
+		return created, err
+	}
+	if err = r.cache.Set(ctx, created.ID, created); err != nil {
+		return created, err
+	}
 	return created, nil
 }
 
 func (r *productRepository) GetByID(ctx context.Context, id int) (*domains.Product, error) {
-	if product, err := r.cache.GetByID(ctx, id); err == nil {
+	product, cacheErr := r.cache.GetByID(ctx, id)
+	if cacheErr == nil {
 		return product, nil
 	}
 
 	query := `
-        SELECT 
-            p.id, p.name, p.description, p.price, p.category_id, p.brand_id, 
-            c.name AS category_name,
-            b.name AS brand_name,
-            p.created_at, p.updated_at
-        FROM products p
-        LEFT JOIN categories c ON p.category_id = c.id
-        LEFT JOIN brands b ON p.brand_id = b.id
-        WHERE p.id = $1`
+		SELECT 
+		p.id, p.name, p.description, p.price, p.category_id, c.name AS category_name,
+		p.brand_id, b.name AS brand_name, p.created_at, p.updated_at,
+		(SELECT ARRAY_AGG(s.id ORDER BY s.id) FROM product_skin_types pst 
+			JOIN skin_types s ON s.id = pst.skin_type_id WHERE pst.product_id = p.id) AS skin_type_ids,
+		(SELECT ARRAY_AGG(s.name ORDER BY s.id) FROM product_skin_types pst 
+			JOIN skin_types s ON s.id = pst.skin_type_id WHERE pst.product_id = p.id) AS skin_type_names
+		FROM products p
+		LEFT JOIN categories c ON p.category_id = c.id
+		LEFT JOIN brands b ON p.brand_id = b.id
+		WHERE p.id = $1`
 
 	row := r.db.QueryRow(ctx, query, id)
 	product, err := scanProductRow(row)
@@ -78,29 +82,43 @@ func (r *productRepository) GetByID(ctx context.Context, id int) (*domains.Produ
 		return nil, err
 	}
 
-	_ = r.cache.Set(ctx, product.ID, product, r.ttl)
+	if cacheErr != redis.Nil {
+		return product, err
+	}
+	if err = r.cache.Set(ctx, product.ID, product); err != nil {
+		return product, err
+	}
 	return product, nil
 }
 
 func scanProductRow(row pgx.Row) (*domains.Product, error) {
 	product := &domains.Product{}
 	var categoryName, brandName *string
+	var skinTypeIDs []int
+	var skinTypeNames []string
 
 	err := row.Scan(
 		&product.ID, &product.Name, &product.Description, &product.Price,
-		&product.CategoryID, &product.BrandID,
-		&categoryName, &brandName,
-		&product.CreatedAt, &product.UpdatedAt,
-	)
+		&product.CategoryID, &categoryName, &product.BrandID, &brandName,
+		&product.CreatedAt, &product.UpdatedAt, &skinTypeIDs, &skinTypeNames)
+	if err != nil {
+		return nil, err
+	}
+
+	for i, name := range skinTypeNames {
+		product.SkinTypes = append(product.SkinTypes, domains.SkinType{
+			ID:   skinTypeIDs[i],
+			Name: name,
+		})
+	}
 
 	if categoryName != nil {
-		product.Category = &domains.Category{Name: *categoryName}
+		product.Category = &domains.Category{ID: *product.CategoryID, Name: *categoryName}
 	}
 	if brandName != nil {
-		product.Brand = &domains.Brand{Name: *brandName}
+		product.Brand = &domains.Brand{ID: *product.BrandID, Name: *brandName}
 	}
-
-	return product, err
+	return product, nil
 }
 
 func (r *productRepository) Update(ctx context.Context, id int, product *domains.Product) (*domains.Product, error) {
@@ -122,8 +140,12 @@ func (r *productRepository) Update(ctx context.Context, id int, product *domains
 		return nil, err
 	}
 
-	_ = r.cache.DeleteAll(ctx)
-	_ = r.cache.Set(ctx, updated.ID, updated, r.ttl)
+	if err = r.cache.DeleteAll(ctx); err != nil {
+		return updated, err
+	}
+	if err = r.cache.Set(ctx, updated.ID, updated); err != nil {
+		return updated, err
+	}
 	return updated, nil
 }
 
@@ -134,18 +156,23 @@ func (r *productRepository) Delete(ctx context.Context, id int) error {
 		return err
 	}
 
-	_ = r.cache.Delete(ctx, id)
-	_ = r.cache.DeleteAll(ctx)
+	if err = r.cache.Delete(ctx, id); err != nil {
+		return err
+	}
+	if err = r.cache.DeleteAll(ctx); err != nil {
+		return err
+	}
 	return nil
 }
 
 func (r *productRepository) GetAll(ctx context.Context) ([]*domains.Product, error) {
-	if products, err := r.cache.GetAll(ctx); err == nil {
+	products, cacheErr := r.cache.GetAll(ctx)
+	if cacheErr == nil {
 		return products, nil
 	}
 
 	query := `
-        SELECT id, name, price, category_id, brand_id, created_at, updated_at 
+        SELECT id, name, price, category_id, brand_id, created_at, updated_at
         FROM products`
 
 	rows, err := r.db.Query(ctx, query)
@@ -154,7 +181,7 @@ func (r *productRepository) GetAll(ctx context.Context) ([]*domains.Product, err
 	}
 	defer rows.Close()
 
-	var products []*domains.Product
+	var productsList []*domains.Product
 	for rows.Next() {
 		product := &domains.Product{}
 		err := rows.Scan(
@@ -165,9 +192,14 @@ func (r *productRepository) GetAll(ctx context.Context) ([]*domains.Product, err
 		if err != nil {
 			return nil, err
 		}
-		products = append(products, product)
+		productsList = append(productsList, product)
 	}
 
-	_ = r.cache.SetAll(ctx, products, r.ttl)
-	return products, nil
+	if cacheErr != redis.Nil {
+		return productsList, err
+	}
+	if err = r.cache.SetAll(ctx, productsList); err != nil {
+		return nil, err
+	}
+	return productsList, nil
 }

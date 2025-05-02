@@ -13,6 +13,7 @@ type Product struct {
 	Category    *Category      `json:"category"`
 	BrandID     *int           `json:"brand_id"`
 	Brand       *Brand         `json:"brand"`
+	SkinTypes   []SkinType     `json:"skin_type"`
 	Images      []ProductImage `json:"images"`
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`

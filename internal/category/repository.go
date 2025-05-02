@@ -4,9 +4,7 @@ import (
 	"context"
 	"e-commerce/internal/cache"
 	"e-commerce/internal/domains"
-	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 )
@@ -21,15 +19,13 @@ type CategoryRepository interface {
 
 type categoryRepository struct {
 	db    *pgxpool.Pool
-	cache cache.CachedRepositoryInterface[domains.Category]
-	ttl   time.Duration
+	cache cache.CacheRepository[domains.Category]
 }
 
-func NewCategoryRepository(db *pgxpool.Pool, redisClient *redis.Client, ttl time.Duration) CategoryRepository {
+func NewCategoryRepository(db *pgxpool.Pool, redisClient *redis.Client) CategoryRepository {
 	return &categoryRepository{
 		db:    db,
-		cache: cache.NewBaseCachedRepository[domains.Category](redisClient, "category"),
-		ttl:   ttl,
+		cache: cache.NewCacheRepository[domains.Category](redisClient, "category"),
 	}
 }
 
@@ -50,13 +46,18 @@ func (r *categoryRepository) Create(ctx context.Context, category *domains.Categ
 		return nil, err
 	}
 
-	_ = r.cache.DeleteAll(ctx)
-	_ = r.cache.Set(ctx, created.ID, created, r.ttl)
+	if err = r.cache.DeleteAll(ctx); err != nil {
+		return created, err
+	}
+	if err = r.cache.Set(ctx, created.ID, created); err != nil {
+		return created, err
+	}
 	return created, nil
 }
 
 func (r *categoryRepository) GetByID(ctx context.Context, id int) (*domains.Category, error) {
-	if category, err := r.cache.GetByID(ctx, id); err == nil {
+	category, cacheErr := r.cache.GetByID(ctx, id)
+	if cacheErr == nil {
 		return category, nil
 	}
 
@@ -65,20 +66,20 @@ func (r *categoryRepository) GetByID(ctx context.Context, id int) (*domains.Cate
         FROM categories 
         WHERE id = $1`
 
+	category = &domains.Category{}
 	row := r.db.QueryRow(ctx, query, id)
-	category, err := scanCategoryRow(row)
+	err := row.Scan(&category.ID, &category.Name, &category.Description)
 	if err != nil {
 		return nil, err
 	}
 
-	_ = r.cache.Set(ctx, category.ID, category, r.ttl)
+	if cacheErr != redis.Nil {
+		return category, err
+	}
+	if err = r.cache.Set(ctx, category.ID, category); err != nil {
+		return category, err
+	}
 	return category, nil
-}
-
-func scanCategoryRow(row pgx.Row) (*domains.Category, error) {
-	category := &domains.Category{}
-	err := row.Scan(&category.ID, &category.Name, &category.Description)
-	return category, err
 }
 
 func (r *categoryRepository) Update(ctx context.Context, id int, category *domains.Category) (*domains.Category, error) {
@@ -97,8 +98,12 @@ func (r *categoryRepository) Update(ctx context.Context, id int, category *domai
 		return nil, err
 	}
 
-	_ = r.cache.DeleteAll(ctx)
-	_ = r.cache.Set(ctx, updated.ID, updated, r.ttl)
+	if err = r.cache.DeleteAll(ctx); err != nil {
+		return updated, err
+	}
+	if err = r.cache.Set(ctx, updated.ID, updated); err != nil {
+		return updated, err
+	}
 	return updated, nil
 }
 
@@ -109,13 +114,18 @@ func (r *categoryRepository) Delete(ctx context.Context, id int) error {
 		return err
 	}
 
-	_ = r.cache.Delete(ctx, id)
-	_ = r.cache.DeleteAll(ctx)
+	if err = r.cache.Delete(ctx, id); err != nil {
+		return err
+	}
+	if err = r.cache.DeleteAll(ctx); err != nil {
+		return err
+	}
 	return nil
 }
 
 func (r *categoryRepository) GetAll(ctx context.Context) ([]*domains.Category, error) {
-	if categories, err := r.cache.GetAll(ctx); err == nil {
+	categories, cacheErr := r.cache.GetAll(ctx)
+	if cacheErr == nil {
 		return categories, nil
 	}
 
@@ -129,16 +139,20 @@ func (r *categoryRepository) GetAll(ctx context.Context) ([]*domains.Category, e
 	}
 	defer rows.Close()
 
-	var categories []*domains.Category
+	var categoriesList []*domains.Category
 	for rows.Next() {
 		category := &domains.Category{}
-		err := rows.Scan(&category.ID, &category.Name, &category.Description)
-		if err != nil {
+		if err = rows.Scan(&category.ID, &category.Name, &category.Description); err != nil {
 			return nil, err
 		}
-		categories = append(categories, category)
+		categoriesList = append(categoriesList, category)
 	}
 
-	_ = r.cache.SetAll(ctx, categories, r.ttl)
-	return categories, nil
+	if cacheErr != redis.Nil {
+		return categoriesList, err
+	}
+	if err = r.cache.SetAll(ctx, categoriesList); err != nil {
+		return categoriesList, err
+	}
+	return categoriesList, nil
 }

@@ -14,6 +14,13 @@ CREATE TABLE brands (
     CHECK (website IS NULL OR website <> '')
 );
 
+CREATE TABLE skin_types (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(50) NOT NULL UNIQUE,
+    description TEXT,
+    CHECK (name <> '')
+);
+
 CREATE TABLE products (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -36,12 +43,18 @@ CREATE TABLE product_images (
     CHECK (image_url <> '')
 );
 
-CREATE INDEX idx_products_category_id   ON products(category_id);
-CREATE INDEX idx_products_brand_id      ON products(brand_id);
-CREATE INDEX idx_product_images_prod_id ON product_images(product_id);
+CREATE TABLE product_skin_types (
+    product_id INT REFERENCES products(id) ON DELETE CASCADE,
+    skin_type_id INT REFERENCES skin_types(id) ON DELETE CASCADE,
+    PRIMARY KEY (product_id, skin_type_id)
+);
 
+CREATE INDEX idx_products_category_id ON products(category_id);
+CREATE INDEX idx_products_brand_id ON products(brand_id);
+CREATE INDEX idx_product_images_prod_id ON product_images(product_id);
 CREATE UNIQUE INDEX idx_product_images_unique_main
     ON product_images(product_id)
     WHERE is_main;
-
 CREATE INDEX idx_product_images_is_main ON product_images(is_main);
+CREATE INDEX idx_product_skin_types_skin_type_id 
+    ON product_skin_types(skin_type_id);

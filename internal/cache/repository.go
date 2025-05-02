@@ -9,28 +9,30 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-type CachedRepositoryInterface[T any] interface {
+type CacheRepository[T any] interface {
 	GetByID(ctx context.Context, id int) (*T, error)
 	GetAll(ctx context.Context) ([]*T, error)
-	Set(ctx context.Context, id int, item *T, ttl time.Duration) error
-	SetAll(ctx context.Context, items []*T, ttl time.Duration) error
+	Set(ctx context.Context, id int, item *T) error
+	SetAll(ctx context.Context, items []*T) error
 	Delete(ctx context.Context, id int) error
 	DeleteAll(ctx context.Context) error
 }
 
-type BaseCachedRepository[T any] struct {
+type cacheRepository[T any] struct {
 	client    *redis.Client
 	keyPrefix string
+	ttl       time.Duration
 }
 
-func NewBaseCachedRepository[T any](client *redis.Client, keyPrefix string) *BaseCachedRepository[T] {
-	return &BaseCachedRepository[T]{
+func NewCacheRepository[T any](client *redis.Client, keyPrefix string) CacheRepository[T] {
+	return &cacheRepository[T]{
 		client:    client,
 		keyPrefix: keyPrefix,
+		ttl:       1 * time.Hour,
 	}
 }
 
-func (r *BaseCachedRepository[T]) GetByID(ctx context.Context, id int) (*T, error) {
+func (r *cacheRepository[T]) GetByID(ctx context.Context, id int) (*T, error) {
 	key := fmt.Sprintf("%s:%d", r.keyPrefix, id)
 	data, err := r.client.Get(ctx, key).Result()
 	if err != nil {
@@ -44,7 +46,7 @@ func (r *BaseCachedRepository[T]) GetByID(ctx context.Context, id int) (*T, erro
 	return &item, nil
 }
 
-func (r *BaseCachedRepository[T]) GetAll(ctx context.Context) ([]*T, error) {
+func (r *cacheRepository[T]) GetAll(ctx context.Context) ([]*T, error) {
 	data, err := r.client.Get(ctx, r.keyPrefix+":all").Result()
 	if err != nil {
 		return nil, err
@@ -57,28 +59,28 @@ func (r *BaseCachedRepository[T]) GetAll(ctx context.Context) ([]*T, error) {
 	return items, nil
 }
 
-func (r *BaseCachedRepository[T]) Set(ctx context.Context, id int, item *T, ttl time.Duration) error {
+func (r *cacheRepository[T]) Set(ctx context.Context, id int, item *T) error {
 	key := fmt.Sprintf("%s:%d", r.keyPrefix, id)
 	data, err := json.Marshal(item)
 	if err != nil {
 		return err
 	}
-	return r.client.Set(ctx, key, data, ttl).Err()
+	return r.client.Set(ctx, key, data, r.ttl).Err()
 }
 
-func (r *BaseCachedRepository[T]) SetAll(ctx context.Context, items []*T, ttl time.Duration) error {
+func (r *cacheRepository[T]) SetAll(ctx context.Context, items []*T) error {
 	data, err := json.Marshal(items)
 	if err != nil {
 		return err
 	}
-	return r.client.Set(ctx, r.keyPrefix+":all", data, ttl).Err()
+	return r.client.Set(ctx, r.keyPrefix+":all", data, r.ttl).Err()
 }
 
-func (r *BaseCachedRepository[T]) Delete(ctx context.Context, id int) error {
+func (r *cacheRepository[T]) Delete(ctx context.Context, id int) error {
 	key := fmt.Sprintf("%s:%d", r.keyPrefix, id)
 	return r.client.Del(ctx, key).Err()
 }
 
-func (r *BaseCachedRepository[T]) DeleteAll(ctx context.Context) error {
+func (r *cacheRepository[T]) DeleteAll(ctx context.Context) error {
 	return r.client.Del(ctx, r.keyPrefix+":all").Err()
 }
