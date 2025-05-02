@@ -2,11 +2,15 @@ package category
 
 import (
 	"context"
+	"database/sql"
 	"e-commerce/internal/cache"
 	"e-commerce/internal/domains"
+	"errors"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"github.com/sirupsen/logrus"
 )
 
 type CategoryRepository interface {
@@ -30,111 +34,156 @@ func NewCategoryRepository(db *pgxpool.Pool, redisClient *redis.Client) Category
 }
 
 func (r *categoryRepository) Create(ctx context.Context, category *domains.Category) (*domains.Category, error) {
-	insertQuery := `
-        INSERT INTO categories (name, description) 
-        VALUES ($1, $2) 
-        RETURNING id`
+	const insertQuery = `
+        INSERT INTO categories (name, description)
+        VALUES ($1, $2)
+        RETURNING id, name, description`
 
-	var id int
-	err := r.db.QueryRow(ctx, insertQuery, category.Name, category.Description).Scan(&id)
+	createdCategory := &domains.Category{}
+	err := r.db.QueryRow(ctx, insertQuery, category.Name, category.Description).Scan(
+		&createdCategory.ID,
+		&createdCategory.Name,
+		&createdCategory.Description,
+	)
 	if err != nil {
+		logrus.WithError(err).WithField("category", category).Error("Failed to insert category")
 		return nil, err
 	}
 
-	created, err := r.GetByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
+	logrus.Infof("Category created successfully (ID: %d)", createdCategory.ID)
 
-	if err = r.cache.DeleteAll(ctx); err != nil {
-		return created, err
+	if err := r.cache.DeleteAll(ctx); err != nil {
+		logrus.Warnf("Failed to clear category cache after creation (ID: %d): %v", createdCategory.ID, err)
 	}
-	if err = r.cache.Set(ctx, created.ID, created); err != nil {
-		return created, err
-	}
-	return created, nil
+	go func(c *domains.Category) {
+		if err := r.cache.Set(context.Background(), c.ID, c); err != nil {
+			logrus.Warnf("Failed to cache created category asynchronously (ID: %d): %v", c.ID, err)
+		} else {
+			logrus.Debugf("Successfully cached created category asynchronously (ID: %d)", c.ID)
+		}
+	}(createdCategory)
+
+	return createdCategory, nil
 }
 
 func (r *categoryRepository) GetByID(ctx context.Context, id int) (*domains.Category, error) {
-	category, cacheErr := r.cache.GetByID(ctx, id)
-	if cacheErr == nil {
+	category, err := r.cache.GetByID(ctx, id)
+	if err == nil {
+		logrus.Debugf("Cache hit for category (ID: %d)", id)
 		return category, nil
 	}
+	if !errors.Is(err, redis.Nil) {
+		logrus.Warnf("Cache lookup failed for category (ID: %d): %v", id, err)
+	}
 
-	query := `
-        SELECT id, name, description 
-        FROM categories 
-        WHERE id = $1`
-
+	const getQuery = `SELECT id, name, description FROM categories WHERE id = $1`
 	category = &domains.Category{}
-	row := r.db.QueryRow(ctx, query, id)
-	err := row.Scan(&category.ID, &category.Name, &category.Description)
+	err = r.db.QueryRow(ctx, getQuery, id).Scan(
+		&category.ID,
+		&category.Name,
+		&category.Description,
+	)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			logrus.Warnf("Category not found (ID: %d)", id)
+			return nil, sql.ErrNoRows
+		}
+		logrus.Errorf("Failed to get category (ID: %d): %v", id, err)
 		return nil, err
 	}
 
-	if cacheErr != redis.Nil {
-		return category, err
-	}
-	if err = r.cache.Set(ctx, category.ID, category); err != nil {
-		return category, err
-	}
+	logrus.Infof("Category received successfuly (ID: %d)", category.ID)
+
+	go func(c *domains.Category) {
+		if err := r.cache.Set(context.Background(), c.ID, c); err != nil {
+			logrus.Warnf("Failed to cache category asynchronously (ID: %d): %v", c.ID, err)
+		} else {
+			logrus.Debugf("Successfully cached category asynchronously (ID: %d)", c.ID)
+		}
+	}(category)
+
 	return category, nil
 }
 
 func (r *categoryRepository) Update(ctx context.Context, id int, category *domains.Category) (*domains.Category, error) {
-	updateQuery := `
+	const updateQuery = `
         UPDATE categories 
         SET name = $1, description = $2 
-        WHERE id = $3`
+        WHERE id = $3
+        RETURNING id, name, description`
 
-	_, err := r.db.Exec(ctx, updateQuery, category.Name, category.Description, id)
+	updatedCategory := &domains.Category{}
+	err := r.db.QueryRow(ctx, updateQuery,
+		category.Name,
+		category.Description,
+		id,
+	).Scan(
+		&updatedCategory.ID,
+		&updatedCategory.Name,
+		&updatedCategory.Description,
+	)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			logrus.Warnf("Attempted to update non-existent category (ID: %d)", id)
+			return nil, sql.ErrNoRows
+		}
+		logrus.Errorf("Failed to update category (ID: %d): %v", id, err)
 		return nil, err
 	}
 
-	updated, err := r.GetByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
+	logrus.Infof("Category updated successfully (ID: %d)", updatedCategory.ID)
 
-	if err = r.cache.DeleteAll(ctx); err != nil {
-		return updated, err
+	if err := r.cache.DeleteAll(ctx); err != nil {
+		logrus.Warnf("Failed to clear category cache after update (ID: %d): %v", id, err)
 	}
-	if err = r.cache.Set(ctx, updated.ID, updated); err != nil {
-		return updated, err
-	}
-	return updated, nil
+	go func(c *domains.Category) {
+		if err := r.cache.Set(context.Background(), c.ID, c); err != nil {
+			logrus.Warnf("Failed to cache updated category asynchronously (ID: %d): %v", c.ID, err)
+		} else {
+			logrus.Debugf("Successfully cached updated category asynchronously (ID: %d)", c.ID)
+		}
+	}(updatedCategory)
+
+	return updatedCategory, nil
 }
 
 func (r *categoryRepository) Delete(ctx context.Context, id int) error {
-	query := `DELETE FROM categories WHERE id = $1`
-	_, err := r.db.Exec(ctx, query, id)
+	const deleteQuery = `DELETE FROM categories WHERE id = $1 RETURNING id`
+
+	var deletedID int
+	err := r.db.QueryRow(ctx, deleteQuery, id).Scan(&deletedID)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			logrus.Warnf("Attempted to delete non-existent category (ID: %d)", id)
+			return sql.ErrNoRows
+		}
+		logrus.Errorf("Failed to delete category (ID: %d): %v", id, err)
 		return err
 	}
 
-	if err = r.cache.Delete(ctx, id); err != nil {
-		return err
+	logrus.Infof("Category deleted successfully (ID: %d)", deletedID)
+
+	if err := r.cache.Delete(ctx, id); err != nil {
+		logrus.Warnf("Failed to remove category from cache (ID: %d): %v", id, err)
 	}
-	if err = r.cache.DeleteAll(ctx); err != nil {
-		return err
+	if err := r.cache.DeleteAll(ctx); err != nil {
+		logrus.Warnf("Failed to clear all categories cache after deletion (ID: %d): %v", id, err)
 	}
+
 	return nil
 }
 
 func (r *categoryRepository) GetAll(ctx context.Context) ([]*domains.Category, error) {
 	categories, cacheErr := r.cache.GetAll(ctx)
 	if cacheErr == nil {
+		logrus.Debug("Cache hit for all categories")
 		return categories, nil
 	}
 
-	query := `
-        SELECT id, name, description 
-        FROM categories`
-
-	rows, err := r.db.Query(ctx, query)
+	const getAllQuery = `SELECT id, name, description FROM categories`
+	rows, err := r.db.Query(ctx, getAllQuery)
 	if err != nil {
+		logrus.Errorf("Failed to get all categories: %v", err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -142,17 +191,30 @@ func (r *categoryRepository) GetAll(ctx context.Context) ([]*domains.Category, e
 	var categoriesList []*domains.Category
 	for rows.Next() {
 		category := &domains.Category{}
-		if err = rows.Scan(&category.ID, &category.Name, &category.Description); err != nil {
+		if err = rows.Scan(
+			&category.ID,
+			&category.Name,
+			&category.Description,
+		); err != nil {
+			logrus.Errorf("Failed to scan category record: %v", err)
 			return nil, err
 		}
 		categoriesList = append(categoriesList, category)
 	}
+	if rows.Err() != nil {
+		logrus.Errorf("Error occurred during iteration of rows: %v", rows.Err())
+		return nil, rows.Err()
+	}
 
-	if cacheErr != redis.Nil {
-		return categoriesList, err
-	}
-	if err = r.cache.SetAll(ctx, categoriesList); err != nil {
-		return categoriesList, err
-	}
+	logrus.Infof("All categories received successfuly (Count: %d)", len(categoriesList))
+
+	go func(cl []*domains.Category) {
+		if err := r.cache.SetAll(context.Background(), cl); err != nil {
+			logrus.Warnf("Failed to cache all categories asynchronously: %v", err)
+		} else {
+			logrus.Debugf("Successfully cached all categories asynchronously (Count: %d)", len(cl))
+		}
+	}(categoriesList)
+
 	return categoriesList, nil
 }

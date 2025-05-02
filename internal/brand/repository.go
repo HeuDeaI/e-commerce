@@ -94,7 +94,7 @@ func (r *brandRepository) GetByID(ctx context.Context, id int) (*domains.Brand, 
 		return nil, err
 	}
 
-	logrus.Infof("Database query successful for brand (ID: %d)", brand.ID)
+	logrus.Infof("Brand received successfuly (ID: %d)", brand.ID)
 
 	go func(b *domains.Brand) {
 		if err := r.cache.Set(context.Background(), b.ID, b); err != nil {
@@ -211,7 +211,7 @@ func (r *brandRepository) GetAll(ctx context.Context) ([]*domains.Brand, error) 
 		return nil, rows.Err()
 	}
 
-	logrus.Infof("Database query successful for all brands (Count: %d)", len(brandsList))
+	logrus.Infof("All brands received successfuly (Count: %d)", len(brandsList))
 
 	go func(bl []*domains.Brand) {
 		if err := r.cache.SetAll(context.Background(), bl); err != nil {
