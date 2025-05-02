@@ -10,6 +10,7 @@ import (
 	"e-commerce/internal/config"
 	"e-commerce/internal/database"
 	"e-commerce/internal/product"
+	"e-commerce/internal/skintype"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -46,14 +47,17 @@ func main() {
 	productRepo := product.NewProductRepository(db.Pool, cacheClient.Client)
 	brandRepo := brand.NewBrandRepository(db.Pool, cacheClient.Client)
 	categoryRepo := category.NewCategoryRepository(db.Pool, cacheClient.Client)
+	skinTypeRepo := skintype.NewSkinTypeRepository(db.Pool, cacheClient.Client)
 
 	productService := product.NewProductService(productRepo)
 	brandService := brand.NewBrandService(brandRepo)
 	categoryService := category.NewCategoryService(categoryRepo)
+	skinTypeService := skintype.NewSkinTypeService(skinTypeRepo)
 
 	productHandler := product.NewProductHandler(productService)
 	brandHandler := brand.NewBrandHandler(brandService)
 	categoryHandler := category.NewCategoryHandler(categoryService)
+	skinTypeHandler := skintype.NewSkinTypeHandler(skinTypeService)
 
 	router := gin.Default()
 
@@ -69,6 +73,7 @@ func main() {
 	productHandler.RegisterRoutes(router)
 	brandHandler.RegisterRoutes(router)
 	categoryHandler.RegisterRoutes(router)
+	skinTypeHandler.RegisterRoutes(router)
 
 	logrus.Info("Server is running on http://localhost:8080")
 	if err := router.Run(":8080"); err != nil {

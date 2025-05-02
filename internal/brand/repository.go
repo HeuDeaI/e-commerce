@@ -51,7 +51,7 @@ func (r *brandRepository) Create(ctx context.Context, brand *domains.Brand) (*do
 		return nil, err
 	}
 
-	logrus.Infof("Brand created successfully (ID: %d)", createdBrand.ID)
+	logrus.Debugf("Brand created successfully (ID: %d)", createdBrand.ID)
 
 	if err := r.cache.DeleteAll(ctx); err != nil {
 		logrus.Warnf("Failed to clear brand cache after creation (ID: %d): %v", createdBrand.ID, err)
@@ -74,7 +74,7 @@ func (r *brandRepository) GetByID(ctx context.Context, id int) (*domains.Brand, 
 		return brand, nil
 	}
 	if !errors.Is(err, redis.Nil) {
-		logrus.Warnf("Cache lookup failed for brand (ID: %d): %v", id, err)
+		logrus.Errorf("Cache lookup failed for brand (ID: %d): %v", id, err)
 	}
 
 	const getQuery = `SELECT id, name, description, website FROM brands WHERE id = $1`
@@ -87,14 +87,14 @@ func (r *brandRepository) GetByID(ctx context.Context, id int) (*domains.Brand, 
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			logrus.Warnf("Brand not found (ID: %d)", id)
+			logrus.Infof("Brand not found (ID: %d)", id)
 			return nil, sql.ErrNoRows
 		}
 		logrus.Errorf("Failed to get brand (ID: %d): %v", id, err)
 		return nil, err
 	}
 
-	logrus.Infof("Brand received successfuly (ID: %d)", brand.ID)
+	logrus.Debugf("Brand retrieved successfully (ID: %d)", brand.ID)
 
 	go func(b *domains.Brand) {
 		if err := r.cache.Set(context.Background(), b.ID, b); err != nil {
@@ -128,14 +128,14 @@ func (r *brandRepository) Update(ctx context.Context, id int, brand *domains.Bra
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			logrus.Warnf("Attempted to update non-existent brand (ID: %d)", id)
+			logrus.Infof("Attempted to update non-existent brand (ID: %d)", id)
 			return nil, sql.ErrNoRows
 		}
 		logrus.Errorf("Failed to update brand (ID: %d): %v", id, err)
 		return nil, err
 	}
 
-	logrus.Infof("Brand updated successfully (ID: %d)", updatedBrand.ID)
+	logrus.Debugf("Brand updated successfully (ID: %d)", updatedBrand.ID)
 
 	if err := r.cache.DeleteAll(ctx); err != nil {
 		logrus.Warnf("Failed to clear brand cache after update (ID: %d): %v", id, err)
@@ -158,14 +158,14 @@ func (r *brandRepository) Delete(ctx context.Context, id int) error {
 	err := r.db.QueryRow(ctx, deleteQuery, id).Scan(&deletedID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			logrus.Warnf("Attempted to delete non-existent brand (ID: %d)", id)
+			logrus.Infof("Attempted to delete non-existent brand (ID: %d)", id)
 			return sql.ErrNoRows
 		}
 		logrus.Errorf("Failed to delete brand (ID: %d): %v", id, err)
 		return err
 	}
 
-	logrus.Infof("Brand deleted successfully (ID: %d)", deletedID)
+	logrus.Debugf("Brand deleted successfully (ID: %d)", deletedID)
 
 	if err := r.cache.Delete(ctx, id); err != nil {
 		logrus.Warnf("Failed to remove brand from cache (ID: %d): %v", id, err)
@@ -178,10 +178,13 @@ func (r *brandRepository) Delete(ctx context.Context, id int) error {
 }
 
 func (r *brandRepository) GetAll(ctx context.Context) ([]*domains.Brand, error) {
-	brands, cacheErr := r.cache.GetAll(ctx)
-	if cacheErr == nil {
+	brands, err := r.cache.GetAll(ctx)
+	if err == nil {
 		logrus.Debug("Cache hit for all brands")
 		return brands, nil
+	}
+	if !errors.Is(err, redis.Nil) {
+		logrus.Errorf("Cache lookup failed for all brands: %v", err)
 	}
 
 	const getAllQuery = `SELECT id, name, description, website FROM brands`
@@ -211,7 +214,7 @@ func (r *brandRepository) GetAll(ctx context.Context) ([]*domains.Brand, error) 
 		return nil, rows.Err()
 	}
 
-	logrus.Infof("All brands received successfuly (Count: %d)", len(brandsList))
+	logrus.Debugf("All brands retrieved successfully (Count: %d)", len(brandsList))
 
 	go func(bl []*domains.Brand) {
 		if err := r.cache.SetAll(context.Background(), bl); err != nil {

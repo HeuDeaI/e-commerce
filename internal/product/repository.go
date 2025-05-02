@@ -61,7 +61,7 @@ func (r *productRepository) Create(ctx context.Context, product *domains.Product
 		return nil, err
 	}
 
-	logrus.Infof("Product created successfully (ID: %d)", createdProduct.ID)
+	logrus.Debugf("Product created successfully (ID: %d)", createdProduct.ID)
 
 	if err := r.cache.DeleteAll(ctx); err != nil {
 		logrus.Warnf("Failed to clear product cache after creation (ID: %d): %v", createdProduct.ID, err)
@@ -84,14 +84,14 @@ func (r *productRepository) GetByID(ctx context.Context, id int) (*domains.Produ
 		return product, nil
 	}
 	if !errors.Is(err, redis.Nil) {
-		logrus.Warnf("Cache lookup failed for product (ID: %d): %v", id, err)
+		logrus.Errorf("Cache lookup failed for product (ID: %d): %v", id, err)
 	}
 
 	const getQuery = `
         SELECT 
             p.id, p.name, p.description, p.price, 
-            p.category_id, c.name AS category_name,
-            p.brand_id, b.name AS brand_name, 
+            COALESCE(p.category_id, c.id) AS category_id, c.name AS category_name,
+            COALESCE(p.brand_id, b.id) AS brand_id, b.name AS brand_name, 
             p.created_at, p.updated_at,
             COALESCE(ARRAY_AGG(st.id ORDER BY st.id), '{}') AS skin_type_ids,
             COALESCE(ARRAY_AGG(st.name ORDER BY st.id), '{}') AS skin_type_names
@@ -106,7 +106,7 @@ func (r *productRepository) GetByID(ctx context.Context, id int) (*domains.Produ
 	rows, err := r.db.Query(ctx, getQuery, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			logrus.Warnf("Product not found (ID: %d)", id)
+			logrus.Infof("Product not found (ID: %d)", id)
 			return nil, sql.ErrNoRows
 		}
 		logrus.Errorf("Failed to get product (ID: %d): %v", id, err)
@@ -115,38 +115,18 @@ func (r *productRepository) GetByID(ctx context.Context, id int) (*domains.Produ
 	defer rows.Close()
 
 	if !rows.Next() {
-		logrus.Warnf("Product not found (ID: %d)", id)
+		logrus.Infof("Product not found (ID: %d)", id)
 		return nil, sql.ErrNoRows
 	}
 
-	product, err = scanProductRow(rows)
-	if err != nil {
-		logrus.Errorf("Failed to scan product row (ID: %d): %v", id, err)
-		return nil, err
-	}
-
-	logrus.Infof("Product received successfuly (ID: %d)", product.ID)
-
-	go func(p *domains.Product) {
-		if err := r.cache.Set(context.Background(), p.ID, p); err != nil {
-			logrus.Warnf("Failed to cache product asynchronously (ID: %d): %v", p.ID, err)
-		} else {
-			logrus.Debugf("Successfully cached product asynchronously (ID: %d)", p.ID)
-		}
-	}(product)
-
-	return product, nil
-}
-
-func scanProductRow(row pgx.Row) (*domains.Product, error) {
-	product := &domains.Product{
+	product = &domains.Product{
 		Category: &domains.Category{},
 		Brand:    &domains.Brand{},
 	}
 	var skinTypeIDs []int
 	var skinTypeNames []string
 
-	err := row.Scan(
+	err = rows.Scan(
 		&product.ID,
 		&product.Name,
 		&product.Description,
@@ -161,7 +141,20 @@ func scanProductRow(row pgx.Row) (*domains.Product, error) {
 		&skinTypeNames,
 	)
 	if err != nil {
+		logrus.Errorf("Failed to scan product row (ID: %d): %v", id, err)
 		return nil, err
+	}
+
+	if product.Category != nil {
+		product.CategoryID = &product.Category.ID
+	} else {
+		product.CategoryID = nil
+	}
+
+	if product.Brand != nil {
+		product.BrandID = &product.Brand.ID
+	} else {
+		product.BrandID = nil
 	}
 
 	for i, id := range skinTypeIDs {
@@ -170,6 +163,16 @@ func scanProductRow(row pgx.Row) (*domains.Product, error) {
 			Name: skinTypeNames[i],
 		})
 	}
+
+	logrus.Debugf("Product retrieved successfully (ID: %d)", product.ID)
+
+	go func(p *domains.Product) {
+		if err := r.cache.Set(context.Background(), p.ID, p); err != nil {
+			logrus.Warnf("Failed to cache product asynchronously (ID: %d): %v", p.ID, err)
+		} else {
+			logrus.Debugf("Successfully cached product asynchronously (ID: %d)", p.ID)
+		}
+	}(product)
 
 	return product, nil
 }
@@ -202,14 +205,14 @@ func (r *productRepository) Update(ctx context.Context, id int, product *domains
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			logrus.Warnf("Attempted to update non-existent product (ID: %d)", id)
+			logrus.Infof("Attempted to update non-existent product (ID: %d)", id)
 			return nil, sql.ErrNoRows
 		}
 		logrus.Errorf("Failed to update product (ID: %d): %v", id, err)
 		return nil, err
 	}
 
-	logrus.Infof("Product updated successfully (ID: %d)", updatedProduct.ID)
+	logrus.Debugf("Product updated successfully (ID: %d)", updatedProduct.ID)
 
 	if err := r.cache.DeleteAll(ctx); err != nil {
 		logrus.Warnf("Failed to clear product cache after update (ID: %d): %v", id, err)
@@ -232,14 +235,14 @@ func (r *productRepository) Delete(ctx context.Context, id int) error {
 	err := r.db.QueryRow(ctx, deleteQuery, id).Scan(&deletedID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			logrus.Warnf("Attempted to delete non-existent product (ID: %d)", id)
+			logrus.Infof("Attempted to delete non-existent product (ID: %d)", id)
 			return sql.ErrNoRows
 		}
 		logrus.Errorf("Failed to delete product (ID: %d): %v", id, err)
 		return err
 	}
 
-	logrus.Infof("Product deleted successfully (ID: %d)", deletedID)
+	logrus.Debugf("Product deleted successfully (ID: %d)", deletedID)
 
 	if err := r.cache.Delete(ctx, id); err != nil {
 		logrus.Warnf("Failed to remove product from cache (ID: %d): %v", id, err)
@@ -252,26 +255,18 @@ func (r *productRepository) Delete(ctx context.Context, id int) error {
 }
 
 func (r *productRepository) GetAll(ctx context.Context) ([]*domains.Product, error) {
-	products, cacheErr := r.cache.GetAll(ctx)
-	if cacheErr == nil {
+	products, err := r.cache.GetAll(ctx)
+	if err == nil {
 		logrus.Debug("Cache hit for all products")
 		return products, nil
 	}
+	if !errors.Is(err, redis.Nil) {
+		logrus.Errorf("Cache lookup failed for all products: %v", err)
+	}
 
 	const getAllQuery = `
-        SELECT 
-            p.id, p.name, p.description, p.price, 
-            p.category_id, c.name AS category_name,
-            p.brand_id, b.name AS brand_name, 
-            p.created_at, p.updated_at,
-            COALESCE(ARRAY_AGG(st.id ORDER BY st.id), '{}') AS skin_type_ids,
-            COALESCE(ARRAY_AGG(st.name ORDER BY st.id), '{}') AS skin_type_names
-        FROM products p
-        LEFT JOIN categories c ON p.category_id = c.id
-        LEFT JOIN brands b ON p.brand_id = b.id
-        LEFT JOIN product_skin_types pst ON p.id = pst.product_id
-        LEFT JOIN skin_types st ON pst.skin_type_id = st.id
-        GROUP BY p.id, c.id, b.id`
+        SELECT id, name, price, created_at
+        FROM products`
 
 	rows, err := r.db.Query(ctx, getAllQuery)
 	if err != nil {
@@ -282,7 +277,10 @@ func (r *productRepository) GetAll(ctx context.Context) ([]*domains.Product, err
 
 	var productsList []*domains.Product
 	for rows.Next() {
-		product, err := scanProductRow(rows)
+		product := &domains.Product{}
+		err := rows.Scan(
+			&product.ID, &product.Name, &product.Price, &product.CreatedAt,
+		)
 		if err != nil {
 			logrus.Errorf("Failed to scan product row: %v", err)
 			return nil, err
@@ -294,7 +292,7 @@ func (r *productRepository) GetAll(ctx context.Context) ([]*domains.Product, err
 		return nil, rows.Err()
 	}
 
-	logrus.Infof("All products received successfuly (Count: %d)", len(productsList))
+	logrus.Debugf("All products retrieved successfully (Count: %d)", len(productsList))
 
 	go func(pl []*domains.Product) {
 		if err := r.cache.SetAll(context.Background(), pl); err != nil {

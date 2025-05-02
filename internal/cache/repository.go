@@ -28,7 +28,7 @@ func NewCacheRepository[T any](client *redis.Client, keyPrefix string) CacheRepo
 	return &cacheRepository[T]{
 		client:    client,
 		keyPrefix: keyPrefix,
-		ttl:       1 * time.Hour,
+		ttl:       20 * time.Minute,
 	}
 }
 

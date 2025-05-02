@@ -50,7 +50,7 @@ func (r *categoryRepository) Create(ctx context.Context, category *domains.Categ
 		return nil, err
 	}
 
-	logrus.Infof("Category created successfully (ID: %d)", createdCategory.ID)
+	logrus.Debugf("Category created successfully (ID: %d)", createdCategory.ID)
 
 	if err := r.cache.DeleteAll(ctx); err != nil {
 		logrus.Warnf("Failed to clear category cache after creation (ID: %d): %v", createdCategory.ID, err)
@@ -73,7 +73,7 @@ func (r *categoryRepository) GetByID(ctx context.Context, id int) (*domains.Cate
 		return category, nil
 	}
 	if !errors.Is(err, redis.Nil) {
-		logrus.Warnf("Cache lookup failed for category (ID: %d): %v", id, err)
+		logrus.Errorf("Cache lookup failed for category (ID: %d): %v", id, err)
 	}
 
 	const getQuery = `SELECT id, name, description FROM categories WHERE id = $1`
@@ -85,14 +85,14 @@ func (r *categoryRepository) GetByID(ctx context.Context, id int) (*domains.Cate
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			logrus.Warnf("Category not found (ID: %d)", id)
+			logrus.Infof("Category not found (ID: %d)", id)
 			return nil, sql.ErrNoRows
 		}
 		logrus.Errorf("Failed to get category (ID: %d): %v", id, err)
 		return nil, err
 	}
 
-	logrus.Infof("Category received successfuly (ID: %d)", category.ID)
+	logrus.Debugf("Category retrieved successfully (ID: %d)", category.ID)
 
 	go func(c *domains.Category) {
 		if err := r.cache.Set(context.Background(), c.ID, c); err != nil {
@@ -124,14 +124,14 @@ func (r *categoryRepository) Update(ctx context.Context, id int, category *domai
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			logrus.Warnf("Attempted to update non-existent category (ID: %d)", id)
+			logrus.Infof("Attempted to update non-existent category (ID: %d)", id)
 			return nil, sql.ErrNoRows
 		}
 		logrus.Errorf("Failed to update category (ID: %d): %v", id, err)
 		return nil, err
 	}
 
-	logrus.Infof("Category updated successfully (ID: %d)", updatedCategory.ID)
+	logrus.Debugf("Category updated successfully (ID: %d)", updatedCategory.ID)
 
 	if err := r.cache.DeleteAll(ctx); err != nil {
 		logrus.Warnf("Failed to clear category cache after update (ID: %d): %v", id, err)
@@ -154,14 +154,14 @@ func (r *categoryRepository) Delete(ctx context.Context, id int) error {
 	err := r.db.QueryRow(ctx, deleteQuery, id).Scan(&deletedID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			logrus.Warnf("Attempted to delete non-existent category (ID: %d)", id)
+			logrus.Infof("Attempted to delete non-existent category (ID: %d)", id)
 			return sql.ErrNoRows
 		}
 		logrus.Errorf("Failed to delete category (ID: %d): %v", id, err)
 		return err
 	}
 
-	logrus.Infof("Category deleted successfully (ID: %d)", deletedID)
+	logrus.Debugf("Category deleted successfully (ID: %d)", deletedID)
 
 	if err := r.cache.Delete(ctx, id); err != nil {
 		logrus.Warnf("Failed to remove category from cache (ID: %d): %v", id, err)
@@ -174,10 +174,13 @@ func (r *categoryRepository) Delete(ctx context.Context, id int) error {
 }
 
 func (r *categoryRepository) GetAll(ctx context.Context) ([]*domains.Category, error) {
-	categories, cacheErr := r.cache.GetAll(ctx)
-	if cacheErr == nil {
+	categories, err := r.cache.GetAll(ctx)
+	if err == nil {
 		logrus.Debug("Cache hit for all categories")
 		return categories, nil
+	}
+	if !errors.Is(err, redis.Nil) {
+		logrus.Errorf("Cache lookup failed for all categories: %v", err)
 	}
 
 	const getAllQuery = `SELECT id, name, description FROM categories`
@@ -206,7 +209,7 @@ func (r *categoryRepository) GetAll(ctx context.Context) ([]*domains.Category, e
 		return nil, rows.Err()
 	}
 
-	logrus.Infof("All categories received successfuly (Count: %d)", len(categoriesList))
+	logrus.Debugf("All categories retrieved successfully (Count: %d)", len(categoriesList))
 
 	go func(cl []*domains.Category) {
 		if err := r.cache.SetAll(context.Background(), cl); err != nil {
