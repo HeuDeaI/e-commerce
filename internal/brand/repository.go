@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"github.com/sirupsen/logrus"
 )
 
 type BrandRepository interface {
@@ -56,27 +57,42 @@ func (r *brandRepository) Create(ctx context.Context, brand *domains.Brand) (*do
 }
 
 func (r *brandRepository) GetByID(ctx context.Context, id int) (*domains.Brand, error) {
-	brand, cacheErr := r.cache.GetByID(ctx, id)
-	if cacheErr == nil {
+	brand, err := r.cache.GetByID(ctx, id)
+	if err == nil {
+		logrus.WithFields(logrus.Fields{"id": id}).Info("Cache hit for brand")
 		return brand, nil
 	}
+	if err != redis.Nil {
+		logrus.WithFields(logrus.Fields{
+			"id":    id,
+			"error": err.Error(),
+		}).Error("Cache lookup failed for brand")
+	}
 
-	query := `
-        SELECT id, name, description, website 
-        FROM brands 
-        WHERE id = $1`
-
+	query := `SELECT id, name, description, website FROM brands WHERE id = $1`
 	brand = &domains.Brand{}
-	err := r.db.QueryRow(ctx, query, id).Scan(&brand.ID, &brand.Name, &brand.Description, &brand.Website)
+	err = r.db.QueryRow(ctx, query, id).Scan(&brand.ID, &brand.Name, &brand.Description, &brand.Website)
 	if err != nil {
+		logrus.WithFields(logrus.Fields{
+			"id":    id,
+			"query": query,
+			"error": err.Error(),
+		}).Error("Database query failed for brand")
 		return nil, err
 	}
 
-	if cacheErr != redis.Nil {
-		return brand, err
-	}
-	if err = r.cache.Set(ctx, brand.ID, brand); err != nil {
-		return brand, err
+	logrus.WithFields(logrus.Fields{
+		"id":    brand.ID,
+		"query": query,
+	}).Info("Database query successful for brand")
+
+	if err := r.cache.Set(ctx, brand.ID, brand); err != nil {
+		logrus.WithFields(logrus.Fields{
+			"id":    brand.ID,
+			"error": err.Error(),
+		}).Warn("Failed to cache brand")
+	} else {
+		logrus.WithFields(logrus.Fields{"id": brand.ID}).Info("Successfully cached brand")
 	}
 
 	return brand, nil

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"e-commerce/internal/brand"
@@ -14,25 +13,33 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/sirupsen/logrus"
 )
 
 func main() {
 	ctx := context.Background()
 
+	logrus.SetFormatter(&logrus.TextFormatter{
+		FullTimestamp:   true,
+		TimestampFormat: time.RFC3339,
+	})
+	logrus.SetLevel(logrus.InfoLevel)
+	logrus.SetReportCaller(true)
+
 	cfg, err := config.Load("configs/config.yaml")
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		logrus.WithError(err).Fatal("Failed to load config")
 	}
 
 	db, err := database.New(ctx, &cfg.Database)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		logrus.WithError(err).Fatal("Failed to connect to database")
 	}
 	defer db.Close()
 
 	cacheClient, err := cache.New(ctx, &cfg.Cache)
 	if err != nil {
-		log.Fatalf("Failed to connect to cache: %v", err)
+		logrus.WithError(err).Fatal("Failed to connect to cache")
 	}
 	defer cacheClient.Close()
 
@@ -63,8 +70,8 @@ func main() {
 	brandHandler.RegisterRoutes(router)
 	categoryHandler.RegisterRoutes(router)
 
-	log.Println("Server is running on http://localhost:8080")
+	logrus.Info("Server is running on http://localhost:8080")
 	if err := router.Run(":8080"); err != nil {
-		log.Fatalf("Server failed: %v", err)
+		logrus.WithError(err).Fatal("Server failed")
 	}
 }
