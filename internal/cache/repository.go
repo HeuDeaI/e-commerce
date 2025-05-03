@@ -11,8 +11,10 @@ import (
 
 type CacheRepository[T any] interface {
 	GetByID(ctx context.Context, id int) (*T, error)
+	GetByKey(ctx context.Context, key string) ([]*T, error)
 	GetAll(ctx context.Context) ([]*T, error)
-	Set(ctx context.Context, id int, item *T) error
+	SetByID(ctx context.Context, id int, item *T) error
+	SetByKey(ctx context.Context, key string, items []*T) error
 	SetAll(ctx context.Context, items []*T) error
 	Delete(ctx context.Context, id int) error
 	DeleteAll(ctx context.Context) error
@@ -46,6 +48,20 @@ func (r *cacheRepository[T]) GetByID(ctx context.Context, id int) (*T, error) {
 	return &item, nil
 }
 
+func (r *cacheRepository[T]) GetByKey(ctx context.Context, key string) ([]*T, error) {
+	cacheKey := fmt.Sprintf("%s:%s", r.keyPrefix, key)
+	data, err := r.client.Get(ctx, cacheKey).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	var items []*T
+	if err := json.Unmarshal([]byte(data), &items); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 func (r *cacheRepository[T]) GetAll(ctx context.Context) ([]*T, error) {
 	data, err := r.client.Get(ctx, r.keyPrefix+":all").Result()
 	if err != nil {
@@ -59,13 +75,22 @@ func (r *cacheRepository[T]) GetAll(ctx context.Context) ([]*T, error) {
 	return items, nil
 }
 
-func (r *cacheRepository[T]) Set(ctx context.Context, id int, item *T) error {
+func (r *cacheRepository[T]) SetByID(ctx context.Context, id int, item *T) error {
 	key := fmt.Sprintf("%s:%d", r.keyPrefix, id)
 	data, err := json.Marshal(item)
 	if err != nil {
 		return err
 	}
 	return r.client.Set(ctx, key, data, r.ttl).Err()
+}
+
+func (r *cacheRepository[T]) SetByKey(ctx context.Context, key string, items []*T) error {
+	cacheKey := fmt.Sprintf("%s:%s", r.keyPrefix, key)
+	data, err := json.Marshal(items)
+	if err != nil {
+		return err
+	}
+	return r.client.Set(ctx, cacheKey, data, r.ttl).Err()
 }
 
 func (r *cacheRepository[T]) SetAll(ctx context.Context, items []*T) error {

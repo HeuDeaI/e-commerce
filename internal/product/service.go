@@ -11,6 +11,7 @@ type ProductService interface {
 	UpdateProduct(ctx context.Context, id int, product *domains.Product) (*domains.Product, error)
 	DeleteProduct(ctx context.Context, id int) error
 	GetAllProducts(ctx context.Context) ([]*domains.Product, error)
+	GetProductsByFilter(ctx context.Context, skinTypeIDs []int, brandIDs []int, categoryIDs []int) ([]*domains.Product, error)
 }
 
 type productService struct {
@@ -38,4 +39,9 @@ func (s *productService) DeleteProduct(ctx context.Context, id int) error {
 
 func (s *productService) GetAllProducts(ctx context.Context) ([]*domains.Product, error) {
 	return s.repo.GetAll(ctx)
+}
+
+func (s *productService) GetProductsByFilter(ctx context.Context, skinTypeIDs []int, brandIDs []int, categoryIDs []int,
+) ([]*domains.Product, error) {
+	return s.repo.GetByFilter(ctx, skinTypeIDs, brandIDs, categoryIDs)
 }

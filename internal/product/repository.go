@@ -6,6 +6,8 @@ import (
 	"e-commerce/internal/cache"
 	"e-commerce/internal/domains"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -19,6 +21,7 @@ type ProductRepository interface {
 	Update(ctx context.Context, id int, product *domains.Product) (*domains.Product, error)
 	Delete(ctx context.Context, id int) error
 	GetAll(ctx context.Context) ([]*domains.Product, error)
+	GetByFilter(ctx context.Context, skinTypeIDs []int, brandIDs []int, categoryIDs []int) ([]*domains.Product, error)
 }
 
 type productRepository struct {
@@ -67,7 +70,7 @@ func (r *productRepository) Create(ctx context.Context, product *domains.Product
 		logrus.Warnf("Failed to clear product cache after creation (ID: %d): %v", createdProduct.ID, err)
 	}
 	go func(p *domains.Product) {
-		if err := r.cache.Set(context.Background(), p.ID, p); err != nil {
+		if err := r.cache.SetByID(context.Background(), p.ID, p); err != nil {
 			logrus.Warnf("Failed to cache created product asynchronously (ID: %d): %v", p.ID, err)
 		} else {
 			logrus.Debugf("Successfully cached created product asynchronously (ID: %d)", p.ID)
@@ -167,7 +170,7 @@ func (r *productRepository) GetByID(ctx context.Context, id int) (*domains.Produ
 	logrus.Debugf("Product retrieved successfully (ID: %d)", product.ID)
 
 	go func(p *domains.Product) {
-		if err := r.cache.Set(context.Background(), p.ID, p); err != nil {
+		if err := r.cache.SetByID(context.Background(), p.ID, p); err != nil {
 			logrus.Warnf("Failed to cache product asynchronously (ID: %d): %v", p.ID, err)
 		} else {
 			logrus.Debugf("Successfully cached product asynchronously (ID: %d)", p.ID)
@@ -218,7 +221,7 @@ func (r *productRepository) Update(ctx context.Context, id int, product *domains
 		logrus.Warnf("Failed to clear product cache after update (ID: %d): %v", id, err)
 	}
 	go func(p *domains.Product) {
-		if err := r.cache.Set(context.Background(), p.ID, p); err != nil {
+		if err := r.cache.SetByID(context.Background(), p.ID, p); err != nil {
 			logrus.Warnf("Failed to cache updated product asynchronously (ID: %d): %v", p.ID, err)
 		} else {
 			logrus.Debugf("Successfully cached updated product asynchronously (ID: %d)", p.ID)
@@ -265,7 +268,7 @@ func (r *productRepository) GetAll(ctx context.Context) ([]*domains.Product, err
 	}
 
 	const getAllQuery = `
-        SELECT id, name, price, created_at
+        SELECT id, name, price
         FROM products`
 
 	rows, err := r.db.Query(ctx, getAllQuery)
@@ -279,7 +282,7 @@ func (r *productRepository) GetAll(ctx context.Context) ([]*domains.Product, err
 	for rows.Next() {
 		product := &domains.Product{}
 		err := rows.Scan(
-			&product.ID, &product.Name, &product.Price, &product.CreatedAt,
+			&product.ID, &product.Name, &product.Price,
 		)
 		if err != nil {
 			logrus.Errorf("Failed to scan product row: %v", err)
@@ -303,4 +306,95 @@ func (r *productRepository) GetAll(ctx context.Context) ([]*domains.Product, err
 	}(productsList)
 
 	return productsList, nil
+}
+
+func (r *productRepository) GetByFilter(ctx context.Context, skinTypeIDs []int, brandIDs []int, categoryIDs []int,
+) ([]*domains.Product, error) {
+	filterKey := fmt.Sprintf("filter:skin=%v:brand=%v:category=%v", skinTypeIDs, brandIDs, categoryIDs)
+
+	products, err := r.cache.GetByKey(ctx, filterKey)
+	if err == nil {
+		logrus.Debugf("Cache hit for products by filter (key: %s)", filterKey)
+		return products, nil
+	} else {
+		if !errors.Is(err, redis.Nil) {
+			logrus.Errorf("Cache lookup failed for filter key %s: %v", filterKey, err)
+		} else {
+			logrus.Debugf("Cache miss for products by filter (key: %s)", filterKey)
+		}
+	}
+
+	var (
+		queryBuilder strings.Builder
+		args         []interface{}
+		conditions   []string
+	)
+
+	queryBuilder.WriteString("SELECT p.id, p.name, p.description, p.price FROM products p")
+	if len(skinTypeIDs) > 0 {
+		queryBuilder.WriteString(" JOIN product_skin_types pst ON p.id = pst.product_id")
+	}
+
+	argPos := 1
+	if len(brandIDs) > 0 {
+		conditions = append(conditions, fmt.Sprintf("p.brand_id = ANY($%d)", argPos))
+		args = append(args, brandIDs)
+		argPos++
+	}
+
+	if len(categoryIDs) > 0 {
+		conditions = append(conditions, fmt.Sprintf("p.category_id = ANY($%d)", argPos))
+		args = append(args, categoryIDs)
+		argPos++
+	}
+
+	if len(skinTypeIDs) > 0 {
+		conditions = append(conditions, fmt.Sprintf("pst.skin_type_id = ANY($%d)", argPos))
+		args = append(args, skinTypeIDs)
+		argPos++
+	}
+
+	if len(conditions) > 0 {
+		queryBuilder.WriteString(" WHERE " + strings.Join(conditions, " AND "))
+	}
+
+	query := queryBuilder.String()
+	logrus.Debugf("Filter Query: %s, Args: %+v", query, args)
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		logrus.Errorf("Failed to execute filtered query: %v", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var p domains.Product
+		if err := rows.Scan(
+			&p.ID,
+			&p.Name,
+			&p.Description,
+			&p.Price,
+		); err != nil {
+			logrus.Errorf("Failed to scan product row in filter query: %v", err)
+			return nil, err
+		}
+		products = append(products, &p)
+	}
+	if err := rows.Err(); err != nil {
+		logrus.Errorf("Error iterating filter query result rows: %v", err)
+		return nil, err
+	}
+
+	logrus.Debugf("Filter products retrieved successfully (Count: %d)", len(products))
+
+	go func(prodList []*domains.Product, key string) {
+		if err := r.cache.SetByKey(context.Background(), key, prodList); err != nil {
+			logrus.Warnf("Failed to cache filtered products asynchronously (key: %s): %v", key, err)
+		} else {
+			logrus.Debugf("Successfully cached filtered products asynchronously (key: %s)", key)
+		}
+	}(products, filterKey)
+
+	return products, nil
 }

@@ -57,7 +57,7 @@ func (r *brandRepository) Create(ctx context.Context, brand *domains.Brand) (*do
 		logrus.Warnf("Failed to clear brand cache after creation (ID: %d): %v", createdBrand.ID, err)
 	}
 	go func(b *domains.Brand) {
-		if err := r.cache.Set(context.Background(), b.ID, b); err != nil {
+		if err := r.cache.SetByID(context.Background(), b.ID, b); err != nil {
 			logrus.Warnf("Failed to cache created brand asynchronously (ID: %d): %v", b.ID, err)
 		} else {
 			logrus.Debugf("Successfully cached created brand asynchronously (ID: %d)", b.ID)
@@ -97,7 +97,7 @@ func (r *brandRepository) GetByID(ctx context.Context, id int) (*domains.Brand, 
 	logrus.Debugf("Brand retrieved successfully (ID: %d)", brand.ID)
 
 	go func(b *domains.Brand) {
-		if err := r.cache.Set(context.Background(), b.ID, b); err != nil {
+		if err := r.cache.SetByID(context.Background(), b.ID, b); err != nil {
 			logrus.Warnf("Failed to cache brand asynchronously (ID: %d): %v", b.ID, err)
 		} else {
 			logrus.Debugf("Successfully cached brand asynchronously (ID: %d)", b.ID)
@@ -141,7 +141,7 @@ func (r *brandRepository) Update(ctx context.Context, id int, brand *domains.Bra
 		logrus.Warnf("Failed to clear brand cache after update (ID: %d): %v", id, err)
 	}
 	go func(b *domains.Brand) {
-		if err := r.cache.Set(context.Background(), b.ID, b); err != nil {
+		if err := r.cache.SetByID(context.Background(), b.ID, b); err != nil {
 			logrus.Warnf("Failed to cache updated brand asynchronously (ID: %d): %v", b.ID, err)
 		} else {
 			logrus.Debugf("Successfully cached updated brand asynchronously (ID: %d)", b.ID)

@@ -5,18 +5,24 @@ import (
 )
 
 type Product struct {
-	ID          int            `json:"id"`
-	Name        string         `json:"name"`
-	Description string         `json:"description,omitempty"`
-	Price       float64        `json:"price"`
-	CategoryID  *int           `json:"category_id,omitempty"`
-	Category    *Category      `json:"category,omitempty"`
-	BrandID     *int           `json:"brand_id,omitempty"`
-	Brand       *Brand         `json:"brand,omitempty"`
-	SkinTypes   []SkinType     `json:"skin_type,omitempty"`
-	Images      []ProductImage `json:"images,omitempty"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"-"`
+	ID          int     `json:"id"`
+	Name        string  `json:"name"`
+	Description string  `json:"description,omitempty"`
+	Price       float64 `json:"price"`
+
+	// Input/Write fields (for create/update operations)
+	CategoryID  *int  `json:"category_id,omitempty"`
+	BrandID     *int  `json:"brand_id,omitempty"`
+	SkinTypeIDs []int `json:"skin_type_ids,omitempty"`
+
+	// Output/Read fields (for response payloads)
+	Category  *Category  `json:"category,omitempty"`
+	Brand     *Brand     `json:"brand,omitempty"`
+	SkinTypes []SkinType `json:"skin_types,omitempty"`
+
+	// System fields
+	CreatedAt *time.Time `json:"created_at,omitempty"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 }
 
 type ProductImage struct {

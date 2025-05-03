@@ -56,7 +56,7 @@ func (r *categoryRepository) Create(ctx context.Context, category *domains.Categ
 		logrus.Warnf("Failed to clear category cache after creation (ID: %d): %v", createdCategory.ID, err)
 	}
 	go func(c *domains.Category) {
-		if err := r.cache.Set(context.Background(), c.ID, c); err != nil {
+		if err := r.cache.SetByID(context.Background(), c.ID, c); err != nil {
 			logrus.Warnf("Failed to cache created category asynchronously (ID: %d): %v", c.ID, err)
 		} else {
 			logrus.Debugf("Successfully cached created category asynchronously (ID: %d)", c.ID)
@@ -95,7 +95,7 @@ func (r *categoryRepository) GetByID(ctx context.Context, id int) (*domains.Cate
 	logrus.Debugf("Category retrieved successfully (ID: %d)", category.ID)
 
 	go func(c *domains.Category) {
-		if err := r.cache.Set(context.Background(), c.ID, c); err != nil {
+		if err := r.cache.SetByID(context.Background(), c.ID, c); err != nil {
 			logrus.Warnf("Failed to cache category asynchronously (ID: %d): %v", c.ID, err)
 		} else {
 			logrus.Debugf("Successfully cached category asynchronously (ID: %d)", c.ID)
@@ -137,7 +137,7 @@ func (r *categoryRepository) Update(ctx context.Context, id int, category *domai
 		logrus.Warnf("Failed to clear category cache after update (ID: %d): %v", id, err)
 	}
 	go func(c *domains.Category) {
-		if err := r.cache.Set(context.Background(), c.ID, c); err != nil {
+		if err := r.cache.SetByID(context.Background(), c.ID, c); err != nil {
 			logrus.Warnf("Failed to cache updated category asynchronously (ID: %d): %v", c.ID, err)
 		} else {
 			logrus.Debugf("Successfully cached updated category asynchronously (ID: %d)", c.ID)

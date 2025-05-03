@@ -56,7 +56,7 @@ func (r *skinTypeRepository) Create(ctx context.Context, skinType *domains.SkinT
 		logrus.Warnf("Failed to clear skin type cache after creation (ID: %d): %v", createdSkinType.ID, err)
 	}
 	go func(st *domains.SkinType) {
-		if err := r.cache.Set(context.Background(), st.ID, st); err != nil {
+		if err := r.cache.SetByID(context.Background(), st.ID, st); err != nil {
 			logrus.Warnf("Failed to cache created skin type asynchronously (ID: %d): %v", st.ID, err)
 		} else {
 			logrus.Debugf("Successfully cached created skin type asynchronously (ID: %d)", st.ID)
@@ -95,7 +95,7 @@ func (r *skinTypeRepository) GetByID(ctx context.Context, id int) (*domains.Skin
 	logrus.Debugf("Skin type retrieved successfully (ID: %d)", skinType.ID)
 
 	go func(st *domains.SkinType) {
-		if err := r.cache.Set(context.Background(), st.ID, st); err != nil {
+		if err := r.cache.SetByID(context.Background(), st.ID, st); err != nil {
 			logrus.Warnf("Failed to cache skin type asynchronously (ID: %d): %v", st.ID, err)
 		} else {
 			logrus.Debugf("Successfully cached skin type asynchronously (ID: %d)", st.ID)
@@ -137,7 +137,7 @@ func (r *skinTypeRepository) Update(ctx context.Context, id int, skinType *domai
 		logrus.Warnf("Failed to clear skin type cache after update (ID: %d): %v", id, err)
 	}
 	go func(st *domains.SkinType) {
-		if err := r.cache.Set(context.Background(), st.ID, st); err != nil {
+		if err := r.cache.SetByID(context.Background(), st.ID, st); err != nil {
 			logrus.Warnf("Failed to cache updated skin type asynchronously (ID: %d): %v", st.ID, err)
 		} else {
 			logrus.Debugf("Successfully cached updated skin type asynchronously (ID: %d)", st.ID)
