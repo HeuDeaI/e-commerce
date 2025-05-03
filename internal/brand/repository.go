@@ -51,8 +51,6 @@ func (r *brandRepository) Create(ctx context.Context, brand *domains.Brand) (*do
 		return nil, err
 	}
 
-	logrus.Debugf("Brand created successfully (ID: %d)", createdBrand.ID)
-
 	if err := r.cache.DeleteAll(ctx); err != nil {
 		logrus.Warnf("Failed to clear brand cache after creation (ID: %d): %v", createdBrand.ID, err)
 	}
@@ -64,6 +62,7 @@ func (r *brandRepository) Create(ctx context.Context, brand *domains.Brand) (*do
 		}
 	}(createdBrand)
 
+	logrus.Debugf("Brand created successfully (ID: %d)", createdBrand.ID)
 	return createdBrand, nil
 }
 
@@ -94,8 +93,6 @@ func (r *brandRepository) GetByID(ctx context.Context, id int) (*domains.Brand, 
 		return nil, err
 	}
 
-	logrus.Debugf("Brand retrieved successfully (ID: %d)", brand.ID)
-
 	go func(b *domains.Brand) {
 		if err := r.cache.SetByID(context.Background(), b.ID, b); err != nil {
 			logrus.Warnf("Failed to cache brand asynchronously (ID: %d): %v", b.ID, err)
@@ -104,6 +101,7 @@ func (r *brandRepository) GetByID(ctx context.Context, id int) (*domains.Brand, 
 		}
 	}(brand)
 
+	logrus.Debugf("Brand retrieved successfully (ID: %d)", brand.ID)
 	return brand, nil
 }
 
@@ -135,8 +133,6 @@ func (r *brandRepository) Update(ctx context.Context, id int, brand *domains.Bra
 		return nil, err
 	}
 
-	logrus.Debugf("Brand updated successfully (ID: %d)", updatedBrand.ID)
-
 	if err := r.cache.DeleteAll(ctx); err != nil {
 		logrus.Warnf("Failed to clear brand cache after update (ID: %d): %v", id, err)
 	}
@@ -148,6 +144,7 @@ func (r *brandRepository) Update(ctx context.Context, id int, brand *domains.Bra
 		}
 	}(updatedBrand)
 
+	logrus.Debugf("Brand updated successfully (ID: %d)", updatedBrand.ID)
 	return updatedBrand, nil
 }
 
@@ -165,8 +162,6 @@ func (r *brandRepository) Delete(ctx context.Context, id int) error {
 		return err
 	}
 
-	logrus.Debugf("Brand deleted successfully (ID: %d)", deletedID)
-
 	if err := r.cache.Delete(ctx, id); err != nil {
 		logrus.Warnf("Failed to remove brand from cache (ID: %d): %v", id, err)
 	}
@@ -174,6 +169,7 @@ func (r *brandRepository) Delete(ctx context.Context, id int) error {
 		logrus.Warnf("Failed to clear all brands cache after deletion (ID: %d): %v", id, err)
 	}
 
+	logrus.Debugf("Brand deleted successfully (ID: %d)", deletedID)
 	return nil
 }
 
@@ -214,8 +210,6 @@ func (r *brandRepository) GetAll(ctx context.Context) ([]*domains.Brand, error) 
 		return nil, rows.Err()
 	}
 
-	logrus.Debugf("All brands retrieved successfully (Count: %d)", len(brandsList))
-
 	go func(bl []*domains.Brand) {
 		if err := r.cache.SetAll(context.Background(), bl); err != nil {
 			logrus.Warnf("Failed to cache all brands asynchronously: %v", err)
@@ -224,5 +218,6 @@ func (r *brandRepository) GetAll(ctx context.Context) ([]*domains.Brand, error) 
 		}
 	}(brandsList)
 
+	logrus.Debugf("All brands retrieved successfully (Count: %d)", len(brandsList))
 	return brandsList, nil
 }

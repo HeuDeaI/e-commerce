@@ -50,8 +50,6 @@ func (r *categoryRepository) Create(ctx context.Context, category *domains.Categ
 		return nil, err
 	}
 
-	logrus.Debugf("Category created successfully (ID: %d)", createdCategory.ID)
-
 	if err := r.cache.DeleteAll(ctx); err != nil {
 		logrus.Warnf("Failed to clear category cache after creation (ID: %d): %v", createdCategory.ID, err)
 	}
@@ -63,6 +61,7 @@ func (r *categoryRepository) Create(ctx context.Context, category *domains.Categ
 		}
 	}(createdCategory)
 
+	logrus.Debugf("Category created successfully (ID: %d)", createdCategory.ID)
 	return createdCategory, nil
 }
 
@@ -92,8 +91,6 @@ func (r *categoryRepository) GetByID(ctx context.Context, id int) (*domains.Cate
 		return nil, err
 	}
 
-	logrus.Debugf("Category retrieved successfully (ID: %d)", category.ID)
-
 	go func(c *domains.Category) {
 		if err := r.cache.SetByID(context.Background(), c.ID, c); err != nil {
 			logrus.Warnf("Failed to cache category asynchronously (ID: %d): %v", c.ID, err)
@@ -102,6 +99,7 @@ func (r *categoryRepository) GetByID(ctx context.Context, id int) (*domains.Cate
 		}
 	}(category)
 
+	logrus.Debugf("Category retrieved successfully (ID: %d)", category.ID)
 	return category, nil
 }
 
@@ -131,8 +129,6 @@ func (r *categoryRepository) Update(ctx context.Context, id int, category *domai
 		return nil, err
 	}
 
-	logrus.Debugf("Category updated successfully (ID: %d)", updatedCategory.ID)
-
 	if err := r.cache.DeleteAll(ctx); err != nil {
 		logrus.Warnf("Failed to clear category cache after update (ID: %d): %v", id, err)
 	}
@@ -144,6 +140,7 @@ func (r *categoryRepository) Update(ctx context.Context, id int, category *domai
 		}
 	}(updatedCategory)
 
+	logrus.Debugf("Category updated successfully (ID: %d)", updatedCategory.ID)
 	return updatedCategory, nil
 }
 
@@ -161,8 +158,6 @@ func (r *categoryRepository) Delete(ctx context.Context, id int) error {
 		return err
 	}
 
-	logrus.Debugf("Category deleted successfully (ID: %d)", deletedID)
-
 	if err := r.cache.Delete(ctx, id); err != nil {
 		logrus.Warnf("Failed to remove category from cache (ID: %d): %v", id, err)
 	}
@@ -170,6 +165,7 @@ func (r *categoryRepository) Delete(ctx context.Context, id int) error {
 		logrus.Warnf("Failed to clear all categories cache after deletion (ID: %d): %v", id, err)
 	}
 
+	logrus.Debugf("Category deleted successfully (ID: %d)", deletedID)
 	return nil
 }
 
@@ -209,8 +205,6 @@ func (r *categoryRepository) GetAll(ctx context.Context) ([]*domains.Category, e
 		return nil, rows.Err()
 	}
 
-	logrus.Debugf("All categories retrieved successfully (Count: %d)", len(categoriesList))
-
 	go func(cl []*domains.Category) {
 		if err := r.cache.SetAll(context.Background(), cl); err != nil {
 			logrus.Warnf("Failed to cache all categories asynchronously: %v", err)
@@ -219,5 +213,6 @@ func (r *categoryRepository) GetAll(ctx context.Context) ([]*domains.Category, e
 		}
 	}(categoriesList)
 
+	logrus.Debugf("All categories retrieved successfully (Count: %d)", len(categoriesList))
 	return categoriesList, nil
 }

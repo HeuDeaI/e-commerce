@@ -50,8 +50,6 @@ func (r *skinTypeRepository) Create(ctx context.Context, skinType *domains.SkinT
 		return nil, err
 	}
 
-	logrus.Debugf("Skin type created successfully (ID: %d)", createdSkinType.ID)
-
 	if err := r.cache.DeleteAll(ctx); err != nil {
 		logrus.Warnf("Failed to clear skin type cache after creation (ID: %d): %v", createdSkinType.ID, err)
 	}
@@ -63,6 +61,7 @@ func (r *skinTypeRepository) Create(ctx context.Context, skinType *domains.SkinT
 		}
 	}(createdSkinType)
 
+	logrus.Debugf("Skin type created successfully (ID: %d)", createdSkinType.ID)
 	return createdSkinType, nil
 }
 
@@ -92,8 +91,6 @@ func (r *skinTypeRepository) GetByID(ctx context.Context, id int) (*domains.Skin
 		return nil, err
 	}
 
-	logrus.Debugf("Skin type retrieved successfully (ID: %d)", skinType.ID)
-
 	go func(st *domains.SkinType) {
 		if err := r.cache.SetByID(context.Background(), st.ID, st); err != nil {
 			logrus.Warnf("Failed to cache skin type asynchronously (ID: %d): %v", st.ID, err)
@@ -102,6 +99,7 @@ func (r *skinTypeRepository) GetByID(ctx context.Context, id int) (*domains.Skin
 		}
 	}(skinType)
 
+	logrus.Debugf("Skin type retrieved successfully (ID: %d)", skinType.ID)
 	return skinType, nil
 }
 
@@ -131,8 +129,6 @@ func (r *skinTypeRepository) Update(ctx context.Context, id int, skinType *domai
 		return nil, err
 	}
 
-	logrus.Debugf("Skin type updated successfully (ID: %d)", updatedSkinType.ID)
-
 	if err := r.cache.DeleteAll(ctx); err != nil {
 		logrus.Warnf("Failed to clear skin type cache after update (ID: %d): %v", id, err)
 	}
@@ -144,6 +140,7 @@ func (r *skinTypeRepository) Update(ctx context.Context, id int, skinType *domai
 		}
 	}(updatedSkinType)
 
+	logrus.Debugf("Skin type updated successfully (ID: %d)", updatedSkinType.ID)
 	return updatedSkinType, nil
 }
 
@@ -209,8 +206,6 @@ func (r *skinTypeRepository) GetAll(ctx context.Context) ([]*domains.SkinType, e
 		return nil, err
 	}
 
-	logrus.Debugf("All skin types retrieved successfully (Count: %d)", len(skinTypeList))
-
 	go func(stList []*domains.SkinType) {
 		if err := r.cache.SetAll(context.Background(), stList); err != nil {
 			logrus.Warnf("Failed to cache all skin types asynchronously: %v", err)
@@ -219,5 +214,6 @@ func (r *skinTypeRepository) GetAll(ctx context.Context) ([]*domains.SkinType, e
 		}
 	}(skinTypeList)
 
+	logrus.Debugf("All skin types retrieved successfully (Count: %d)", len(skinTypeList))
 	return skinTypeList, nil
 }

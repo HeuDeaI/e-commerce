@@ -37,13 +37,24 @@ func NewProductRepository(db *pgxpool.Pool, redisClient *redis.Client) ProductRe
 }
 
 func (r *productRepository) Create(ctx context.Context, product *domains.Product) (*domains.Product, error) {
-	const insertQuery = `
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		logrus.WithError(err).Error("Failed to begin transaction")
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback(ctx)
+		}
+	}()
+
+	const insertProductQuery = `
         INSERT INTO products (name, description, price, category_id, brand_id)
         VALUES ($1, $2, $3, $4, $5)
         RETURNING id, name, description, price, category_id, brand_id, created_at, updated_at`
 
 	createdProduct := &domains.Product{}
-	err := r.db.QueryRow(ctx, insertQuery,
+	err = tx.QueryRow(ctx, insertProductQuery,
 		product.Name,
 		product.Description,
 		product.Price,
@@ -64,11 +75,24 @@ func (r *productRepository) Create(ctx context.Context, product *domains.Product
 		return nil, err
 	}
 
-	logrus.Debugf("Product created successfully (ID: %d)", createdProduct.ID)
-
-	if err := r.cache.DeleteAll(ctx); err != nil {
-		logrus.Warnf("Failed to clear product cache after creation (ID: %d): %v", createdProduct.ID, err)
+	if len(product.SkinTypeIDs) > 0 {
+		const insertSkinTypeQuery = `
+            INSERT INTO product_skin_types (product_id, skin_type_id)
+            VALUES ($1, $2)`
+		for _, skinTypeID := range product.SkinTypeIDs {
+			if _, err = tx.Exec(ctx, insertSkinTypeQuery, createdProduct.ID, skinTypeID); err != nil {
+				logrus.WithError(err).Errorf("Failed to insert product_skin_type (product_id: %d, skin_type_id: %d)", createdProduct.ID, skinTypeID)
+				return nil, err
+			}
+		}
+		createdProduct.SkinTypeIDs = product.SkinTypeIDs
 	}
+
+	if err = tx.Commit(ctx); err != nil {
+		logrus.WithError(err).Error("Failed to commit transaction")
+		return nil, err
+	}
+
 	go func(p *domains.Product) {
 		if err := r.cache.SetByID(context.Background(), p.ID, p); err != nil {
 			logrus.Warnf("Failed to cache created product asynchronously (ID: %d): %v", p.ID, err)
@@ -77,6 +101,7 @@ func (r *productRepository) Create(ctx context.Context, product *domains.Product
 		}
 	}(createdProduct)
 
+	logrus.Debugf("Product created successfully (ID: %d)", createdProduct.ID)
 	return createdProduct, nil
 }
 
