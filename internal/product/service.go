@@ -6,12 +6,12 @@ import (
 )
 
 type ProductService interface {
-	CreateProduct(ctx context.Context, product *domains.Product) (*domains.Product, error)
-	GetProductByID(ctx context.Context, id int) (*domains.Product, error)
-	UpdateProduct(ctx context.Context, id int, product *domains.Product) (*domains.Product, error)
+	CreateProduct(ctx context.Context, req *domains.ProductRequest) (*domains.ProductResponse, error)
+	GetProductByID(ctx context.Context, id int) (*domains.ProductResponse, error)
+	UpdateProduct(ctx context.Context, id int, req *domains.ProductRequest) (*domains.ProductResponse, error)
 	DeleteProduct(ctx context.Context, id int) error
-	GetAllProducts(ctx context.Context) ([]*domains.Product, error)
-	GetProductsByFilter(ctx context.Context, skinTypeIDs []int, brandIDs []int, categoryIDs []int) ([]*domains.Product, error)
+	GetAllProducts(ctx context.Context) ([]*domains.ProductResponse, error)
+	GetProductsByFilter(ctx context.Context, skinTypeIDs []int, brandIDs []int, categoryIDs []int) ([]*domains.ProductResponse, error)
 }
 
 type productService struct {
@@ -21,27 +21,27 @@ type productService struct {
 func NewProductService(repo ProductRepository) ProductService {
 	return &productService{repo: repo}
 }
-func (s *productService) CreateProduct(ctx context.Context, product *domains.Product) (*domains.Product, error) {
-	return s.repo.Create(ctx, product)
+
+func (s *productService) CreateProduct(ctx context.Context, req *domains.ProductRequest) (*domains.ProductResponse, error) {
+	return s.repo.Create(ctx, req)
 }
 
-func (s *productService) GetProductByID(ctx context.Context, id int) (*domains.Product, error) {
+func (s *productService) GetProductByID(ctx context.Context, id int) (*domains.ProductResponse, error) {
 	return s.repo.GetByID(ctx, id)
 }
 
-func (s *productService) UpdateProduct(ctx context.Context, id int, product *domains.Product) (*domains.Product, error) {
-	return s.repo.Update(ctx, id, product)
+func (s *productService) UpdateProduct(ctx context.Context, id int, req *domains.ProductRequest) (*domains.ProductResponse, error) {
+	return s.repo.Update(ctx, id, req)
 }
 
 func (s *productService) DeleteProduct(ctx context.Context, id int) error {
 	return s.repo.Delete(ctx, id)
 }
 
-func (s *productService) GetAllProducts(ctx context.Context) ([]*domains.Product, error) {
+func (s *productService) GetAllProducts(ctx context.Context) ([]*domains.ProductResponse, error) {
 	return s.repo.GetAll(ctx)
 }
 
-func (s *productService) GetProductsByFilter(ctx context.Context, skinTypeIDs []int, brandIDs []int, categoryIDs []int,
-) ([]*domains.Product, error) {
+func (s *productService) GetProductsByFilter(ctx context.Context, skinTypeIDs []int, brandIDs []int, categoryIDs []int) ([]*domains.ProductResponse, error) {
 	return s.repo.GetByFilter(ctx, skinTypeIDs, brandIDs, categoryIDs)
 }

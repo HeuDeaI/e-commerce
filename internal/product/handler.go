@@ -26,13 +26,13 @@ func (h *ProductHandler) RegisterRoutes(router *gin.Engine) {
 }
 
 func (h *ProductHandler) CreateProduct(c *gin.Context) {
-	var product domains.Product
-	if err := c.ShouldBindJSON(&product); err != nil {
+	var req domains.ProductRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	createdProduct, err := h.service.CreateProduct(c.Request.Context(), &product)
+	createdProduct, err := h.service.CreateProduct(c.Request.Context(), &req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -66,13 +66,13 @@ func (h *ProductHandler) UpdateProduct(c *gin.Context) {
 		return
 	}
 
-	var product domains.Product
-	if err := c.ShouldBindJSON(&product); err != nil {
+	var req domains.ProductRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	updatedProduct, err := h.service.UpdateProduct(c.Request.Context(), id, &product)
+	updatedProduct, err := h.service.UpdateProduct(c.Request.Context(), id, &req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
