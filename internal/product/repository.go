@@ -102,6 +102,9 @@ func (r *productRepository) Create(ctx context.Context, req *domains.ProductRequ
 		return nil, err
 	}
 
+	if err := r.cache.DeleteAll(ctx); err != nil {
+		logrus.Warnf("Failed to clear product cache after create (ID: %d): %v", prodResp.ID, err)
+	}
 	go func(p *domains.ProductResponse) {
 		if err := r.cache.SetByID(context.Background(), p.ID, p); err != nil {
 			logrus.Warnf("Failed to cache created product asynchronously (ID: %d): %v", p.ID, err)
