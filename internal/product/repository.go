@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/minio/minio-go/v7"
 	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 )
@@ -25,14 +26,16 @@ type ProductRepository interface {
 }
 
 type productRepository struct {
-	db    *pgxpool.Pool
-	cache cache.CacheRepository[domains.ProductResponse]
+	db           *pgxpool.Pool
+	cache        cache.CacheRepository[domains.ProductResponse]
+	imagestorage *minio.Client
 }
 
-func NewProductRepository(db *pgxpool.Pool, redisClient *redis.Client) ProductRepository {
+func NewProductRepository(db *pgxpool.Pool, redisClient *redis.Client, minioClient *minio.Client) ProductRepository {
 	return &productRepository{
-		db:    db,
-		cache: cache.NewCacheRepository[domains.ProductResponse](redisClient, "product"),
+		db:           db,
+		cache:        cache.NewCacheRepository[domains.ProductResponse](redisClient, "product"),
+		imagestorage: minioClient,
 	}
 }
 

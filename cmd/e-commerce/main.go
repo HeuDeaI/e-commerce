@@ -9,6 +9,7 @@ import (
 	"e-commerce/internal/category"
 	"e-commerce/internal/config"
 	"e-commerce/internal/database"
+	"e-commerce/internal/imagestorage"
 	"e-commerce/internal/product"
 	"e-commerce/internal/skintype"
 
@@ -44,7 +45,13 @@ func main() {
 	}
 	defer cacheClient.Close()
 
-	productRepo := product.NewProductRepository(db.Pool, cacheClient.Client)
+	minioClient, err := imagestorage.New(ctx, &cfg.Minio)
+	if err != nil {
+		logrus.WithError(err).Fatal("Failed to connect to cache")
+	}
+	defer cacheClient.Close()
+
+	productRepo := product.NewProductRepository(db.Pool, cacheClient.Client, minioClient.Client)
 	brandRepo := brand.NewBrandRepository(db.Pool, cacheClient.Client)
 	categoryRepo := category.NewCategoryRepository(db.Pool, cacheClient.Client)
 	skinTypeRepo := skintype.NewSkinTypeRepository(db.Pool, cacheClient.Client)

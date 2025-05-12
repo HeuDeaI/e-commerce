@@ -9,6 +9,7 @@ import (
 type Config struct {
 	Database PostgresConfig
 	Cache    RedisConfig
+	Minio    MinioConfig
 }
 
 type PostgresConfig struct {
@@ -26,6 +27,14 @@ type RedisConfig struct {
 	Addr     string
 	Password string
 	DB       int
+}
+
+type MinioConfig struct {
+	Endpoint   string
+	AccessKey  string `mapstructure:"access_key"`
+	SecretKey  string `mapstructure:"secret_key"`
+	UseSSL     bool   `mapstructure:"use_ssl"`
+	BucketName string `mapstructure:"bucket_name"`
 }
 
 func (p *PostgresConfig) DSN() string {
