@@ -11,6 +11,7 @@ import (
 type ImageStorageRepository interface {
 	Upload(ctx context.Context, file io.Reader, id int) (string, error)
 	Delete(ctx context.Context, id int) error
+	GetImage(ctx context.Context, id int) (io.ReadCloser, error)
 }
 
 type imageStorageRepository struct {
@@ -26,7 +27,7 @@ func NewImageStorageRepository(client *minio.Client, bucket string) ImageStorage
 }
 
 func (r *imageStorageRepository) Upload(ctx context.Context, file io.Reader, id int) (string, error) {
-	objectName := fmt.Sprintf("%d.jpg", id)
+	objectName := fmt.Sprintf("image_%d.jpg", id)
 	_, err := r.client.PutObject(ctx, r.bucket, objectName, file, -1, minio.PutObjectOptions{ContentType: "image/jpeg"})
 	if err != nil {
 		return "", err
@@ -36,6 +37,11 @@ func (r *imageStorageRepository) Upload(ctx context.Context, file io.Reader, id 
 }
 
 func (r *imageStorageRepository) Delete(ctx context.Context, id int) error {
-	objectName := fmt.Sprintf("%d.jpg", id)
+	objectName := fmt.Sprintf("image_%d.jpg", id)
 	return r.client.RemoveObject(ctx, r.bucket, objectName, minio.RemoveObjectOptions{})
+}
+
+func (r *imageStorageRepository) GetImage(ctx context.Context, id int) (io.ReadCloser, error) {
+	objectName := fmt.Sprintf("image_%d.jpg", id)
+	return r.client.GetObject(ctx, r.bucket, objectName, minio.GetObjectOptions{})
 }

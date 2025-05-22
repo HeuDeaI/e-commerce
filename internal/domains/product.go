@@ -31,4 +31,5 @@ type ProductImage struct {
 	ImageURL  string `json:"image_url"`
 	AltText   string `json:"alt_text,omitempty"`
 	IsMain    bool   `json:"is_main"`
+	ImageData string `json:"image_data,omitempty"`
 }

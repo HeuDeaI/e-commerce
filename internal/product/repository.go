@@ -40,7 +40,7 @@ func NewProductRepository(db *pgxpool.Pool, redisClient *redis.Client, minioClie
 	return &productRepository{
 		db:           db,
 		cache:        cache.NewCacheRepository[domains.ProductResponse](redisClient, "product"),
-		imageStorage: imagestorage.NewImageStorageRepository(minioClient, "product"),
+		imageStorage: imagestorage.NewImageStorageRepository(minioClient, "products"),
 	}
 }
 
@@ -59,37 +59,19 @@ func (r *productRepository) Create(ctx context.Context, req *domains.ProductRequ
 	const insertProductQuery = `
         INSERT INTO products (name, description, price, category_id, brand_id)
         VALUES ($1, $2, $3, $4, $5)
-        RETURNING id, name, description, price, category_id, brand_id, created_at, updated_at`
+        RETURNING id`
 
-	var prodResp domains.ProductResponse
-	var tempCategoryID, tempBrandID sql.NullInt64
-
+	var productID int
 	err = tx.QueryRow(ctx, insertProductQuery,
 		req.Name,
 		req.Description,
 		req.Price,
 		req.CategoryID,
 		req.BrandID,
-	).Scan(
-		&prodResp.ID,
-		&prodResp.Name,
-		&prodResp.Description,
-		&prodResp.Price,
-		&tempCategoryID,
-		&tempBrandID,
-		&prodResp.CreatedAt,
-		&prodResp.UpdatedAt,
-	)
+	).Scan(&productID)
 	if err != nil {
 		logrus.WithError(err).WithField("req", req).Error("Failed to insert product")
 		return nil, err
-	}
-
-	if tempCategoryID.Valid {
-		prodResp.Category = &domains.Category{ID: int(tempCategoryID.Int64)}
-	}
-	if tempBrandID.Valid {
-		prodResp.Brand = &domains.Brand{ID: int(tempBrandID.Int64)}
 	}
 
 	if len(req.SkinTypeIDs) > 0 {
@@ -97,11 +79,10 @@ func (r *productRepository) Create(ctx context.Context, req *domains.ProductRequ
             INSERT INTO product_skin_types (product_id, skin_type_id)
             VALUES ($1, $2)`
 		for _, skinTypeID := range req.SkinTypeIDs {
-			if _, err = tx.Exec(ctx, insertSkinTypeQuery, prodResp.ID, skinTypeID); err != nil {
-				logrus.WithError(err).Errorf("Failed to insert product_skin_type (product_id: %d, skin_type_id: %d)", prodResp.ID, skinTypeID)
+			if _, err = tx.Exec(ctx, insertSkinTypeQuery, productID, skinTypeID); err != nil {
+				logrus.WithError(err).Errorf("Failed to insert product_skin_type (product_id: %d, skin_type_id: %d)", productID, skinTypeID)
 				return nil, err
 			}
-			prodResp.SkinTypes = append(prodResp.SkinTypes, domains.SkinType{ID: skinTypeID})
 		}
 	}
 
@@ -111,18 +92,17 @@ func (r *productRepository) Create(ctx context.Context, req *domains.ProductRequ
 	}
 
 	if err := r.cache.DeleteAll(ctx); err != nil {
-		logrus.Warnf("Failed to clear product cache after create (ID: %d): %v", prodResp.ID, err)
+		logrus.Warnf("Failed to clear product cache after create (ID: %d): %v", productID, err)
 	}
-	go func(p *domains.ProductResponse) {
-		if err := r.cache.SetByID(context.Background(), p.ID, p); err != nil {
-			logrus.Warnf("Failed to cache created product asynchronously (ID: %d): %v", p.ID, err)
-		} else {
-			logrus.Debugf("Successfully cached created product asynchronously (ID: %d)", p.ID)
-		}
-	}(&prodResp)
 
-	logrus.Debugf("Product created successfully (ID: %d)", prodResp.ID)
-	return &prodResp, nil
+	logrus.Debugf("Product created successfully (ID: %d)", productID)
+
+	fullProduct, err := r.GetByID(ctx, productID)
+	if err != nil {
+		logrus.WithError(err).Errorf("Failed to fetch full product data after creation (ID: %d)", productID)
+		return nil, err
+	}
+	return fullProduct, nil
 }
 
 func (r *productRepository) GetByID(ctx context.Context, id int) (*domains.ProductResponse, error) {
