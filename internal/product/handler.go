@@ -6,26 +6,37 @@ import (
 	"strings"
 
 	"e-commerce/internal/domains"
+
 	"github.com/gin-gonic/gin"
+	"github.com/sirupsen/logrus"
 )
 
-type ProductHandler struct {
+type ProductHandler interface {
+	RegisterRoutes(router *gin.Engine)
+}
+
+type productHandler struct {
 	service ProductService
 }
 
-func NewProductHandler(service ProductService) *ProductHandler {
-	return &ProductHandler{service: service}
+func NewProductHandler(service ProductService) ProductHandler {
+	return &productHandler{service: service}
 }
 
-func (h *ProductHandler) RegisterRoutes(router *gin.Engine) {
-	router.POST("/products", h.CreateProduct)
-	router.GET("/products/:id", h.GetProductByID)
-	router.PUT("/products/:id", h.UpdateProduct)
-	router.DELETE("/products/:id", h.DeleteProduct)
-	router.GET("/products", h.GetProducts)
+func (h *productHandler) RegisterRoutes(router *gin.Engine) {
+	router.POST("/products", h.createProduct)
+	router.GET("/products/:id", h.getProductByID)
+	router.PUT("/products/:id", h.updateProduct)
+	router.DELETE("/products/:id", h.deleteProduct)
+	router.GET("/products", h.getAllProducts)
+	router.GET("/products/filter", h.getProductsByFilter)
+
+	router.POST("/products/:id/images", h.uploadProductImage)
+	router.DELETE("/products/images/:imageID", h.deleteProductImage)
+	router.GET("/products/:id/images", h.getProductImages)
 }
 
-func (h *ProductHandler) CreateProduct(c *gin.Context) {
+func (h *productHandler) createProduct(c *gin.Context) {
 	var req domains.ProductRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -41,7 +52,7 @@ func (h *ProductHandler) CreateProduct(c *gin.Context) {
 	c.JSON(http.StatusCreated, createdProduct)
 }
 
-func (h *ProductHandler) GetProductByID(c *gin.Context) {
+func (h *productHandler) getProductByID(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
@@ -58,7 +69,7 @@ func (h *ProductHandler) GetProductByID(c *gin.Context) {
 	c.JSON(http.StatusOK, product)
 }
 
-func (h *ProductHandler) UpdateProduct(c *gin.Context) {
+func (h *productHandler) updateProduct(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
@@ -81,7 +92,7 @@ func (h *ProductHandler) UpdateProduct(c *gin.Context) {
 	c.JSON(http.StatusOK, updatedProduct)
 }
 
-func (h *ProductHandler) DeleteProduct(c *gin.Context) {
+func (h *productHandler) deleteProduct(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
@@ -97,25 +108,7 @@ func (h *ProductHandler) DeleteProduct(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-func (h *ProductHandler) GetProducts(c *gin.Context) {
-	allowedParams := map[string]bool{"skin-type": true, "brand": true, "category": true}
-
-	for param := range c.Request.URL.Query() {
-		if !allowedParams[param] {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid query parameter: " + param})
-			return
-		}
-	}
-
-	if c.Query("skin-type") != "" || c.Query("brand") != "" || c.Query("category") != "" {
-		h.GetProductsByFilter(c)
-		return
-	}
-
-	h.GetAllProducts(c)
-}
-
-func (h *ProductHandler) GetAllProducts(c *gin.Context) {
+func (h *productHandler) getAllProducts(c *gin.Context) {
 	products, err := h.service.GetAllProducts(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -125,7 +118,7 @@ func (h *ProductHandler) GetAllProducts(c *gin.Context) {
 	c.JSON(http.StatusOK, products)
 }
 
-func (h *ProductHandler) GetProductsByFilter(c *gin.Context) {
+func (h *productHandler) getProductsByFilter(c *gin.Context) {
 	skinTypeIDs := parseIDs(c.Query("skin-type"))
 	brandIDs := parseIDs(c.Query("brand"))
 	categoryIDs := parseIDs(c.Query("category"))
@@ -154,4 +147,72 @@ func parseIDs(param string) []int {
 	}
 
 	return ids
+}
+
+func (h *productHandler) uploadProductImage(c *gin.Context) {
+	productID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID"})
+		return
+	}
+
+	file, err := c.FormFile("image")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No image file provided"})
+		return
+	}
+
+	isMain := c.PostForm("is_main") == "true"
+	altText := c.PostForm("alt_text")
+
+	// Open the uploaded file
+	src, err := file.Open()
+	if err != nil {
+		logrus.WithError(err).Error("Failed to open uploaded file")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process image"})
+		return
+	}
+	defer src.Close()
+
+	image, err := h.service.UploadProductImage(c.Request.Context(), productID, src, isMain, altText)
+	if err != nil {
+		logrus.WithError(err).Error("Failed to upload product image")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload image"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, image)
+}
+
+func (h *productHandler) deleteProductImage(c *gin.Context) {
+	imageID, err := strconv.Atoi(c.Param("imageID"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid image ID"})
+		return
+	}
+
+	if err := h.service.DeleteProductImage(c.Request.Context(), imageID); err != nil {
+		logrus.WithError(err).Error("Failed to delete product image")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete image"})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+func (h *productHandler) getProductImages(c *gin.Context) {
+	productID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID"})
+		return
+	}
+
+	images, err := h.service.GetProductImages(c.Request.Context(), productID)
+	if err != nil {
+		logrus.WithError(err).Error("Failed to get product images")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get images"})
+		return
+	}
+
+	c.JSON(http.StatusOK, images)
 }

@@ -3,6 +3,7 @@ package product
 import (
 	"context"
 	"e-commerce/internal/domains"
+	"io"
 )
 
 type ProductService interface {
@@ -12,6 +13,9 @@ type ProductService interface {
 	DeleteProduct(ctx context.Context, id int) error
 	GetAllProducts(ctx context.Context) ([]*domains.ProductResponse, error)
 	GetProductsByFilter(ctx context.Context, skinTypeIDs []int, brandIDs []int, categoryIDs []int) ([]*domains.ProductResponse, error)
+	UploadProductImage(ctx context.Context, productID int, file io.Reader, isMain bool, altText string) (*domains.ProductImage, error)
+	DeleteProductImage(ctx context.Context, imageID int) error
+	GetProductImages(ctx context.Context, productID int) ([]*domains.ProductImage, error)
 }
 
 type productService struct {
@@ -44,4 +48,16 @@ func (s *productService) GetAllProducts(ctx context.Context) ([]*domains.Product
 
 func (s *productService) GetProductsByFilter(ctx context.Context, skinTypeIDs []int, brandIDs []int, categoryIDs []int) ([]*domains.ProductResponse, error) {
 	return s.repo.GetByFilter(ctx, skinTypeIDs, brandIDs, categoryIDs)
+}
+
+func (s *productService) UploadProductImage(ctx context.Context, productID int, file io.Reader, isMain bool, altText string) (*domains.ProductImage, error) {
+	return s.repo.UploadImage(ctx, productID, file, isMain, altText)
+}
+
+func (s *productService) DeleteProductImage(ctx context.Context, imageID int) error {
+	return s.repo.DeleteImage(ctx, imageID)
+}
+
+func (s *productService) GetProductImages(ctx context.Context, productID int) ([]*domains.ProductImage, error) {
+	return s.repo.GetProductImages(ctx, productID)
 }

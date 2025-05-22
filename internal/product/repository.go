@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"e-commerce/internal/cache"
 	"e-commerce/internal/domains"
+	"e-commerce/internal/imagestorage"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -23,19 +25,22 @@ type ProductRepository interface {
 	Delete(ctx context.Context, id int) error
 	GetAll(ctx context.Context) ([]*domains.ProductResponse, error)
 	GetByFilter(ctx context.Context, skinTypeIDs []int, brandIDs []int, categoryIDs []int) ([]*domains.ProductResponse, error)
+	UploadImage(ctx context.Context, productID int, file io.Reader, isMain bool, altText string) (*domains.ProductImage, error)
+	DeleteImage(ctx context.Context, imageID int) error
+	GetProductImages(ctx context.Context, productID int) ([]*domains.ProductImage, error)
 }
 
 type productRepository struct {
 	db           *pgxpool.Pool
 	cache        cache.CacheRepository[domains.ProductResponse]
-	imagestorage *minio.Client
+	imageStorage imagestorage.ImageStorageRepository
 }
 
 func NewProductRepository(db *pgxpool.Pool, redisClient *redis.Client, minioClient *minio.Client) ProductRepository {
 	return &productRepository{
 		db:           db,
 		cache:        cache.NewCacheRepository[domains.ProductResponse](redisClient, "product"),
-		imagestorage: minioClient,
+		imageStorage: imagestorage.NewImageStorageRepository(minioClient, "product"),
 	}
 }
 
@@ -427,4 +432,157 @@ func (r *productRepository) GetByFilter(ctx context.Context, skinTypeIDs []int, 
 
 	logrus.Debugf("Filter products retrieved successfully (Count: %d)", len(productsList))
 	return productsList, nil
+}
+
+func (r *productRepository) UploadImage(ctx context.Context, productID int, file io.Reader, isMain bool, altText string) (*domains.ProductImage, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		logrus.WithError(err).Error("Failed to begin transaction")
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback(ctx)
+		}
+	}()
+
+	imageURL, err := r.imageStorage.Upload(ctx, file, productID)
+	if err != nil {
+		logrus.WithError(err).Error("Failed to upload image to storage")
+		return nil, err
+	}
+
+	if isMain {
+		const unsetMainQuery = `
+			UPDATE product_images 
+			SET is_main = false 
+			WHERE product_id = $1`
+		if _, err = tx.Exec(ctx, unsetMainQuery, productID); err != nil {
+			logrus.WithError(err).Error("Failed to unset existing main image")
+			return nil, err
+		}
+	}
+
+	const insertImageQuery = `
+		INSERT INTO product_images (product_id, image_url, alt_text, is_main)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id, product_id, image_url, alt_text, is_main`
+
+	var image domains.ProductImage
+	err = tx.QueryRow(ctx, insertImageQuery,
+		productID,
+		imageURL,
+		altText,
+		isMain,
+	).Scan(
+		&image.ID,
+		&image.ProductID,
+		&image.ImageURL,
+		&image.AltText,
+		&image.IsMain,
+	)
+	if err != nil {
+		logrus.WithError(err).Error("Failed to insert image record")
+		return nil, err
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		logrus.WithError(err).Error("Failed to commit transaction")
+		return nil, err
+	}
+
+	if err := r.cache.Delete(ctx, productID); err != nil {
+		logrus.Warnf("Failed to invalidate product cache after image upload (ID: %d): %v", productID, err)
+	}
+
+	return &image, nil
+}
+
+func (r *productRepository) DeleteImage(ctx context.Context, imageID int) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		logrus.WithError(err).Error("Failed to begin transaction")
+		return err
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback(ctx)
+		}
+	}()
+
+	const getImageQuery = `
+		SELECT product_id, image_url 
+		FROM product_images 
+		WHERE id = $1`
+
+	var productID int
+	var imageURL string
+	err = tx.QueryRow(ctx, getImageQuery, imageID).Scan(&productID, &imageURL)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return sql.ErrNoRows
+		}
+		logrus.WithError(err).Error("Failed to get image info")
+		return err
+	}
+
+	const deleteImageQuery = `DELETE FROM product_images WHERE id = $1`
+	if _, err = tx.Exec(ctx, deleteImageQuery, imageID); err != nil {
+		logrus.WithError(err).Error("Failed to delete image record")
+		return err
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		logrus.WithError(err).Error("Failed to commit transaction")
+		return err
+	}
+
+	if err := r.imageStorage.Delete(ctx, productID); err != nil {
+		logrus.WithError(err).Error("Failed to delete image from storage")
+	}
+
+	if err := r.cache.Delete(ctx, productID); err != nil {
+		logrus.Warnf("Failed to invalidate product cache after image deletion (ID: %d): %v", productID, err)
+	}
+
+	return nil
+}
+
+func (r *productRepository) GetProductImages(ctx context.Context, productID int) ([]*domains.ProductImage, error) {
+	const getImagesQuery = `
+		SELECT id, product_id, image_url, alt_text, is_main
+		FROM product_images
+		WHERE product_id = $1
+		ORDER BY is_main DESC, id ASC`
+
+	rows, err := r.db.Query(ctx, getImagesQuery, productID)
+	if err != nil {
+		logrus.WithError(err).Error("Failed to query product images")
+		return nil, err
+	}
+	defer rows.Close()
+
+	var images []*domains.ProductImage
+	for rows.Next() {
+		var image domains.ProductImage
+		err := rows.Scan(
+			&image.ID,
+			&image.ProductID,
+			&image.ImageURL,
+			&image.AltText,
+			&image.IsMain,
+		)
+		if err != nil {
+			logrus.WithError(err).Error("Failed to scan image row")
+			return nil, err
+		}
+		images = append(images, &image)
+	}
+
+	if err = rows.Err(); err != nil {
+		logrus.WithError(err).Error("Error iterating image rows")
+		return nil, err
+	}
+
+	return images, nil
 }
