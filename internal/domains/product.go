@@ -33,3 +33,8 @@ type ProductImage struct {
 	IsMain    bool   `json:"is_main"`
 	ImageData string `json:"image_data,omitempty"`
 }
+
+type PriceRange struct {
+	MinPrice *float64 `json:"min_price,omitempty"`
+	MaxPrice *float64 `json:"max_price,omitempty"`
+}

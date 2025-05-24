@@ -24,7 +24,7 @@ type ProductRepository interface {
 	Update(ctx context.Context, id int, req *domains.ProductRequest) (*domains.ProductResponse, error)
 	Delete(ctx context.Context, id int) error
 	GetAll(ctx context.Context) ([]*domains.ProductResponse, error)
-	GetByFilter(ctx context.Context, skinTypeIDs []int, brandIDs []int, categoryIDs []int) ([]*domains.ProductResponse, error)
+	GetByFilter(ctx context.Context, skinTypeIDs []int, brandIDs []int, categoryIDs []int, priceRange *domains.PriceRange) ([]*domains.ProductResponse, error)
 	UploadImage(ctx context.Context, productID int, file io.Reader, isMain bool, altText string) (*domains.ProductImage, error)
 	DeleteImage(ctx context.Context, imageID int) error
 	GetProductImages(ctx context.Context, productID int) ([]*domains.ProductImage, error)
@@ -334,8 +334,8 @@ func (r *productRepository) GetAll(ctx context.Context) ([]*domains.ProductRespo
 	return productsList, nil
 }
 
-func (r *productRepository) GetByFilter(ctx context.Context, skinTypeIDs []int, brandIDs []int, categoryIDs []int) ([]*domains.ProductResponse, error) {
-	filterKey := fmt.Sprintf("filter:skin=%v:brand=%v:category=%v", skinTypeIDs, brandIDs, categoryIDs)
+func (r *productRepository) GetByFilter(ctx context.Context, skinTypeIDs []int, brandIDs []int, categoryIDs []int, priceRange *domains.PriceRange) ([]*domains.ProductResponse, error) {
+	filterKey := fmt.Sprintf("filter:skin=%v:brand=%v:category=%v:price=%v", skinTypeIDs, brandIDs, categoryIDs, priceRange)
 
 	productsResp, err := r.cache.GetByKey(ctx, filterKey)
 	if err == nil {
@@ -372,6 +372,18 @@ func (r *productRepository) GetByFilter(ctx context.Context, skinTypeIDs []int, 
 		conditions = append(conditions, fmt.Sprintf("pst.skin_type_id = ANY($%d)", argPos))
 		args = append(args, skinTypeIDs)
 		argPos++
+	}
+	if priceRange != nil {
+		if priceRange.MinPrice != nil {
+			conditions = append(conditions, fmt.Sprintf("p.price >= $%d", argPos))
+			args = append(args, *priceRange.MinPrice)
+			argPos++
+		}
+		if priceRange.MaxPrice != nil {
+			conditions = append(conditions, fmt.Sprintf("p.price <= $%d", argPos))
+			args = append(args, *priceRange.MaxPrice)
+			argPos++
+		}
 	}
 	if len(conditions) > 0 {
 		queryBuilder.WriteString(" WHERE " + strings.Join(conditions, " AND "))

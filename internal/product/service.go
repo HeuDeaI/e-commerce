@@ -12,7 +12,7 @@ type ProductService interface {
 	UpdateProduct(ctx context.Context, id int, req *domains.ProductRequest) (*domains.ProductResponse, error)
 	DeleteProduct(ctx context.Context, id int) error
 	GetAllProducts(ctx context.Context) ([]*domains.ProductResponse, error)
-	GetProductsByFilter(ctx context.Context, skinTypeIDs []int, brandIDs []int, categoryIDs []int) ([]*domains.ProductResponse, error)
+	GetProductsByFilter(ctx context.Context, skinTypeIDs []int, brandIDs []int, categoryIDs []int, priceRange *domains.PriceRange) ([]*domains.ProductResponse, error)
 	UploadProductImage(ctx context.Context, productID int, file io.Reader, isMain bool, altText string) (*domains.ProductImage, error)
 	DeleteProductImage(ctx context.Context, imageID int) error
 	GetProductImages(ctx context.Context, productID int) ([]*domains.ProductImage, error)
@@ -46,8 +46,8 @@ func (s *productService) GetAllProducts(ctx context.Context) ([]*domains.Product
 	return s.repo.GetAll(ctx)
 }
 
-func (s *productService) GetProductsByFilter(ctx context.Context, skinTypeIDs []int, brandIDs []int, categoryIDs []int) ([]*domains.ProductResponse, error) {
-	return s.repo.GetByFilter(ctx, skinTypeIDs, brandIDs, categoryIDs)
+func (s *productService) GetProductsByFilter(ctx context.Context, skinTypeIDs []int, brandIDs []int, categoryIDs []int, priceRange *domains.PriceRange) ([]*domains.ProductResponse, error) {
+	return s.repo.GetByFilter(ctx, skinTypeIDs, brandIDs, categoryIDs, priceRange)
 }
 
 func (s *productService) UploadProductImage(ctx context.Context, productID int, file io.Reader, isMain bool, altText string) (*domains.ProductImage, error) {

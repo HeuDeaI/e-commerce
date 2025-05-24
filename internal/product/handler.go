@@ -123,7 +123,19 @@ func (h *productHandler) getProductsByFilter(c *gin.Context) {
 	brandIDs := parseIDs(c.Query("brand"))
 	categoryIDs := parseIDs(c.Query("category"))
 
-	products, err := h.service.GetProductsByFilter(c.Request.Context(), skinTypeIDs, brandIDs, categoryIDs)
+	var priceRange domains.PriceRange
+	if minPrice := c.Query("min_price"); minPrice != "" {
+		if price, err := strconv.ParseFloat(minPrice, 64); err == nil {
+			priceRange.MinPrice = &price
+		}
+	}
+	if maxPrice := c.Query("max_price"); maxPrice != "" {
+		if price, err := strconv.ParseFloat(maxPrice, 64); err == nil {
+			priceRange.MaxPrice = &price
+		}
+	}
+
+	products, err := h.service.GetProductsByFilter(c.Request.Context(), skinTypeIDs, brandIDs, categoryIDs, &priceRange)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
