@@ -1,0 +1,808 @@
+basePath: /
+definitions:
+  domains.Brand:
+    properties:
+      description:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      website:
+        type: string
+    type: object
+  domains.Category:
+    properties:
+      description:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+    type: object
+  domains.Error:
+    properties:
+      error:
+        example: Error message
+        type: string
+    type: object
+  domains.ProductImage:
+    properties:
+      alt_text:
+        type: string
+      id:
+        type: integer
+      image_data:
+        type: string
+      image_url:
+        type: string
+      is_main:
+        type: boolean
+      product_id:
+        type: integer
+    type: object
+  domains.ProductRequest:
+    properties:
+      brand_id:
+        type: integer
+      category_id:
+        type: integer
+      description:
+        type: string
+      name:
+        type: string
+      price:
+        type: number
+      skin_type_ids:
+        items:
+          type: integer
+        type: array
+    type: object
+  domains.ProductResponse:
+    properties:
+      brand:
+        $ref: '#/definitions/domains.Brand'
+      category:
+        $ref: '#/definitions/domains.Category'
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      price:
+        type: number
+      skin_types:
+        items:
+          $ref: '#/definitions/domains.SkinType'
+        type: array
+      updated_at:
+        type: string
+    type: object
+  domains.SkinType:
+    properties:
+      description:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: API for managing products, categories, brands, and skin types in an
+    e-commerce system
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: E-commerce API
+  version: "1.0"
+paths:
+  /brands:
+    get:
+      consumes:
+      - application/json
+      description: Get a list of all brands
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domains.Brand'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domains.Error'
+      summary: Get all brands
+      tags:
+      - brands
+    post:
+      consumes:
+      - application/json
+      description: Create a new brand with the provided details
+      parameters:
+      - description: Brand object
+        in: body
+        name: brand
+        required: true
+        schema:
+          $ref: '#/definitions/domains.Brand'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/domains.Brand'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domains.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domains.Error'
+      summary: Create a new brand
+      tags:
+      - brands
+  /brands/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a brand by its ID
+      parameters:
+      - description: Brand ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domains.Error'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domains.Error'
+      summary: Delete brand
+      tags:
+      - brands
+    get:
+      consumes:
+      - application/json
+      description: Get a brand by its ID
+      parameters:
+      - description: Brand ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domains.Brand'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domains.Error'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domains.Error'
+      summary: Get brand by ID
+      tags:
+      - brands
+    put:
+      consumes:
+      - application/json
+      description: Update an existing brand
+      parameters:
+      - description: Brand ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Brand object
+        in: body
+        name: brand
+        required: true
+        schema:
+          $ref: '#/definitions/domains.Brand'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domains.Brand'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domains.Error'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domains.Error'
+      summary: Update brand
+      tags:
+      - brands
+  /categories:
+    get:
+      consumes:
+      - application/json
+      description: Get a list of all categories
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domains.Category'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domains.Error'
+      summary: Get all categories
+      tags:
+      - categories
+    post:
+      consumes:
+      - application/json
+      description: Create a new category with the provided details
+      parameters:
+      - description: Category object
+        in: body
+        name: category
+        required: true
+        schema:
+          $ref: '#/definitions/domains.Category'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/domains.Category'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domains.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domains.Error'
+      summary: Create a new category
+      tags:
+      - categories
+  /categories/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a category by its ID
+      parameters:
+      - description: Category ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domains.Error'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domains.Error'
+      summary: Delete category
+      tags:
+      - categories
+    get:
+      consumes:
+      - application/json
+      description: Get a category by its ID
+      parameters:
+      - description: Category ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domains.Category'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domains.Error'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domains.Error'
+      summary: Get category by ID
+      tags:
+      - categories
+    put:
+      consumes:
+      - application/json
+      description: Update an existing category
+      parameters:
+      - description: Category ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Category object
+        in: body
+        name: category
+        required: true
+        schema:
+          $ref: '#/definitions/domains.Category'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domains.Category'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domains.Error'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domains.Error'
+      summary: Update category
+      tags:
+      - categories
+  /products:
+    get:
+      consumes:
+      - application/json
+      description: Get a list of all products
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domains.ProductResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domains.Error'
+      summary: Get all products
+      tags:
+      - products
+    post:
+      consumes:
+      - application/json
+      description: Create a new product with the provided details
+      parameters:
+      - description: Product object
+        in: body
+        name: product
+        required: true
+        schema:
+          $ref: '#/definitions/domains.ProductRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/domains.ProductResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domains.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domains.Error'
+      summary: Create a new product
+      tags:
+      - products
+  /products/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a product by its ID
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domains.Error'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domains.Error'
+      summary: Delete product
+      tags:
+      - products
+    get:
+      consumes:
+      - application/json
+      description: Get a product by its ID
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domains.ProductResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domains.Error'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domains.Error'
+      summary: Get product by ID
+      tags:
+      - products
+    put:
+      consumes:
+      - application/json
+      description: Update an existing product
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Product object
+        in: body
+        name: product
+        required: true
+        schema:
+          $ref: '#/definitions/domains.ProductRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domains.ProductResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domains.Error'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domains.Error'
+      summary: Update product
+      tags:
+      - products
+  /products/{id}/images:
+    get:
+      consumes:
+      - application/json
+      description: Get all images for a product
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domains.ProductImage'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domains.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domains.Error'
+      summary: Get product images
+      tags:
+      - products
+    post:
+      consumes:
+      - multipart/form-data
+      description: Upload an image for a product
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Image file
+        in: formData
+        name: image
+        required: true
+        type: file
+      - description: Whether this is the main image
+        in: formData
+        name: is_main
+        type: boolean
+      - description: Alternative text for the image
+        in: formData
+        name: alt_text
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/domains.ProductImage'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domains.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domains.Error'
+      summary: Upload product image
+      tags:
+      - products
+  /products/filter:
+    get:
+      consumes:
+      - application/json
+      description: Get products filtered by various criteria
+      parameters:
+      - description: Comma-separated list of skin type IDs
+        in: query
+        name: skin-type
+        type: string
+      - description: Comma-separated list of brand IDs
+        in: query
+        name: brand
+        type: string
+      - description: Comma-separated list of category IDs
+        in: query
+        name: category
+        type: string
+      - description: Minimum price
+        in: query
+        name: min_price
+        type: number
+      - description: Maximum price
+        in: query
+        name: max_price
+        type: number
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domains.ProductResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domains.Error'
+      summary: Filter products
+      tags:
+      - products
+  /products/images/{imageID}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a product image by its ID
+      parameters:
+      - description: Image ID
+        in: path
+        name: imageID
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domains.Error'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domains.Error'
+      summary: Delete product image
+      tags:
+      - products
+  /skin-types:
+    get:
+      consumes:
+      - application/json
+      description: Get a list of all skin types
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domains.SkinType'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domains.Error'
+      summary: Get all skin types
+      tags:
+      - skin-types
+    post:
+      consumes:
+      - application/json
+      description: Create a new skin type with the provided details
+      parameters:
+      - description: Skin Type object
+        in: body
+        name: skinType
+        required: true
+        schema:
+          $ref: '#/definitions/domains.SkinType'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/domains.SkinType'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domains.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domains.Error'
+      summary: Create a new skin type
+      tags:
+      - skin-types
+  /skin-types/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a skin type by its ID
+      parameters:
+      - description: Skin Type ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domains.Error'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domains.Error'
+      summary: Delete skin type
+      tags:
+      - skin-types
+    get:
+      consumes:
+      - application/json
+      description: Get a skin type by its ID
+      parameters:
+      - description: Skin Type ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domains.SkinType'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domains.Error'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domains.Error'
+      summary: Get skin type by ID
+      tags:
+      - skin-types
+    put:
+      consumes:
+      - application/json
+      description: Update an existing skin type
+      parameters:
+      - description: Skin Type ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Skin Type object
+        in: body
+        name: skinType
+        required: true
+        schema:
+          $ref: '#/definitions/domains.SkinType'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domains.SkinType'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domains.Error'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domains.Error'
+      summary: Update skin type
+      tags:
+      - skin-types
+securityDefinitions:
+  BasicAuth:
+    type: basic
+swagger: "2.0"

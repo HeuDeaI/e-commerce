@@ -13,11 +13,31 @@ import (
 	"e-commerce/internal/product"
 	"e-commerce/internal/skintype"
 
+	_ "e-commerce/docs/swagger"
+
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
+// @title           E-commerce API
+// @version         1.0
+// @description     API for managing products, categories, brands, and skin types in an e-commerce system
+// @termsOfService  http://swagger.io/terms/
+
+// @contact.name   API Support
+// @contact.url    http://www.swagger.io/support
+// @contact.email  support@swagger.io
+
+// @license.name  Apache 2.0
+// @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
+
+// @host      localhost:8080
+// @BasePath  /
+
+// @securityDefinitions.basic  BasicAuth
 func main() {
 	ctx := context.Background()
 
@@ -76,6 +96,9 @@ func main() {
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
+
+	// Swagger documentation endpoint
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	productHandler.RegisterRoutes(router)
 	brandHandler.RegisterRoutes(router)

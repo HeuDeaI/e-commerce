@@ -36,6 +36,16 @@ func (h *productHandler) RegisterRoutes(router *gin.Engine) {
 	router.GET("/products/:id/images", h.getProductImages)
 }
 
+// @Summary Create a new product
+// @Description Create a new product with the provided details
+// @Tags products
+// @Accept json
+// @Produce json
+// @Param product body domains.ProductRequest true "Product object"
+// @Success 201 {object} domains.ProductResponse
+// @Failure 400 {object} domains.Error
+// @Failure 500 {object} domains.Error
+// @Router /products [post]
 func (h *productHandler) createProduct(c *gin.Context) {
 	var req domains.ProductRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -52,6 +62,16 @@ func (h *productHandler) createProduct(c *gin.Context) {
 	c.JSON(http.StatusCreated, createdProduct)
 }
 
+// @Summary Get product by ID
+// @Description Get a product by its ID
+// @Tags products
+// @Accept json
+// @Produce json
+// @Param id path int true "Product ID"
+// @Success 200 {object} domains.ProductResponse
+// @Failure 400 {object} domains.Error
+// @Failure 404 {object} domains.Error
+// @Router /products/{id} [get]
 func (h *productHandler) getProductByID(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.Atoi(idStr)
@@ -69,6 +89,17 @@ func (h *productHandler) getProductByID(c *gin.Context) {
 	c.JSON(http.StatusOK, product)
 }
 
+// @Summary Update product
+// @Description Update an existing product
+// @Tags products
+// @Accept json
+// @Produce json
+// @Param id path int true "Product ID"
+// @Param product body domains.ProductRequest true "Product object"
+// @Success 200 {object} domains.ProductResponse
+// @Failure 400 {object} domains.Error
+// @Failure 404 {object} domains.Error
+// @Router /products/{id} [put]
 func (h *productHandler) updateProduct(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.Atoi(idStr)
@@ -92,6 +123,16 @@ func (h *productHandler) updateProduct(c *gin.Context) {
 	c.JSON(http.StatusOK, updatedProduct)
 }
 
+// @Summary Delete product
+// @Description Delete a product by its ID
+// @Tags products
+// @Accept json
+// @Produce json
+// @Param id path int true "Product ID"
+// @Success 204 "No Content"
+// @Failure 400 {object} domains.Error
+// @Failure 404 {object} domains.Error
+// @Router /products/{id} [delete]
 func (h *productHandler) deleteProduct(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.Atoi(idStr)
@@ -108,6 +149,14 @@ func (h *productHandler) deleteProduct(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// @Summary Get all products
+// @Description Get a list of all products
+// @Tags products
+// @Accept json
+// @Produce json
+// @Success 200 {array} domains.ProductResponse
+// @Failure 500 {object} domains.Error
+// @Router /products [get]
 func (h *productHandler) getAllProducts(c *gin.Context) {
 	products, err := h.service.GetAllProducts(c.Request.Context())
 	if err != nil {
@@ -118,6 +167,19 @@ func (h *productHandler) getAllProducts(c *gin.Context) {
 	c.JSON(http.StatusOK, products)
 }
 
+// @Summary Filter products
+// @Description Get products filtered by various criteria
+// @Tags products
+// @Accept json
+// @Produce json
+// @Param skin-type query string false "Comma-separated list of skin type IDs"
+// @Param brand query string false "Comma-separated list of brand IDs"
+// @Param category query string false "Comma-separated list of category IDs"
+// @Param min_price query number false "Minimum price"
+// @Param max_price query number false "Maximum price"
+// @Success 200 {array} domains.ProductResponse
+// @Failure 500 {object} domains.Error
+// @Router /products/filter [get]
 func (h *productHandler) getProductsByFilter(c *gin.Context) {
 	skinTypeIDs := parseIDs(c.Query("skin-type"))
 	brandIDs := parseIDs(c.Query("brand"))
@@ -144,23 +206,19 @@ func (h *productHandler) getProductsByFilter(c *gin.Context) {
 	c.JSON(http.StatusOK, products)
 }
 
-func parseIDs(param string) []int {
-	var ids []int
-	if param == "" {
-		return ids
-	}
-
-	strIDs := strings.Split(param, ",")
-	for _, strID := range strIDs {
-		id, err := strconv.Atoi(strID)
-		if err == nil {
-			ids = append(ids, id)
-		}
-	}
-
-	return ids
-}
-
+// @Summary Upload product image
+// @Description Upload an image for a product
+// @Tags products
+// @Accept multipart/form-data
+// @Produce json
+// @Param id path int true "Product ID"
+// @Param image formData file true "Image file"
+// @Param is_main formData bool false "Whether this is the main image"
+// @Param alt_text formData string false "Alternative text for the image"
+// @Success 201 {object} domains.ProductImage
+// @Failure 400 {object} domains.Error
+// @Failure 500 {object} domains.Error
+// @Router /products/{id}/images [post]
 func (h *productHandler) uploadProductImage(c *gin.Context) {
 	productID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -177,7 +235,6 @@ func (h *productHandler) uploadProductImage(c *gin.Context) {
 	isMain := c.PostForm("is_main") == "true"
 	altText := c.PostForm("alt_text")
 
-	// Open the uploaded file
 	src, err := file.Open()
 	if err != nil {
 		logrus.WithError(err).Error("Failed to open uploaded file")
@@ -196,6 +253,16 @@ func (h *productHandler) uploadProductImage(c *gin.Context) {
 	c.JSON(http.StatusCreated, image)
 }
 
+// @Summary Delete product image
+// @Description Delete a product image by its ID
+// @Tags products
+// @Accept json
+// @Produce json
+// @Param imageID path int true "Image ID"
+// @Success 204 "No Content"
+// @Failure 400 {object} domains.Error
+// @Failure 404 {object} domains.Error
+// @Router /products/images/{imageID} [delete]
 func (h *productHandler) deleteProductImage(c *gin.Context) {
 	imageID, err := strconv.Atoi(c.Param("imageID"))
 	if err != nil {
@@ -212,6 +279,16 @@ func (h *productHandler) deleteProductImage(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// @Summary Get product images
+// @Description Get all images for a product
+// @Tags products
+// @Accept json
+// @Produce json
+// @Param id path int true "Product ID"
+// @Success 200 {array} domains.ProductImage
+// @Failure 400 {object} domains.Error
+// @Failure 500 {object} domains.Error
+// @Router /products/{id}/images [get]
 func (h *productHandler) getProductImages(c *gin.Context) {
 	productID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -227,4 +304,21 @@ func (h *productHandler) getProductImages(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, images)
+}
+
+func parseIDs(param string) []int {
+	var ids []int
+	if param == "" {
+		return ids
+	}
+
+	strIDs := strings.Split(param, ",")
+	for _, strID := range strIDs {
+		id, err := strconv.Atoi(strID)
+		if err == nil {
+			ids = append(ids, id)
+		}
+	}
+
+	return ids
 }
